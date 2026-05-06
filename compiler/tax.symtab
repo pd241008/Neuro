@@ -1,0 +1,11 @@
+================ SYMBOL TABLE ================
+ID        TYPE       SIZE      SCOPE     OFFSET
+----------------------------------------------
+income    float      4 bytes   main()    [rbp-4]
+tax       float      4 bytes   main()    [rbp-8]
+==============================================
+
+[TYPE CHECK] Line 5: Float 'income' compared to Int '250000'. 
+             Action -> Implicit promotion of 250000 to Float.
+[TYPE CHECK] Line 6: Assignment of (Float * Float) to Float 'tax'. 
+             Action -> Valid.

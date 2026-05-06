@@ -1,0 +1,27 @@
+call scanf, "%f", &income
+
+    t1 = income <= 250000.0
+    if_false t1 goto .L_FALSE_1
+    tax = 0.0
+    goto .L_END_ALL
+
+.L_FALSE_1:
+    t2 = income <= 500000.0
+    if_false t2 goto .L_FALSE_2
+    t3 = income * 0.05
+    tax = t3
+    goto .L_END_ALL
+
+.L_FALSE_2:
+    t4 = income <= 1000000.0
+    if_false t4 goto .L_FALSE_3
+    t5 = income * 0.20
+    tax = t5
+    goto .L_END_ALL
+
+.L_FALSE_3:
+    t6 = income * 0.30
+    tax = t6
+
+.L_END_ALL:
+    call printf, "Tax = %.2f", tax
