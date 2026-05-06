@@ -143,5 +143,5 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 Distributed under the MIT License. See `LICENSE` for more information.
 
 <p align="center">
-  Built with 🦀 and ☕ by the NEURO Team
+  Built with 🦀 and ☕ by the Prathmesh Desai
 </p>
