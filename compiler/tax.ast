@@ -1,0 +1,28 @@
+ProgramRoot
+└── FunctionDecl: main()
+    ├── VarDeclList
+    │   ├── Var: income (Type: float)
+    │   └── Var: tax (Type: float)
+    ├── CallExpr: scanf
+    │   ├── Arg 1: "%f"
+    │   └── Arg 2: AddressOf(&income)
+    └── IfStmt
+        ├── Condition: BinaryOp (<=)
+        │   ├── Left: income
+        │   └── Right: 250000
+        ├── TrueBlock:
+        │   └── AssignOp (=)
+        │       ├── Target: tax
+        │       └── Value: 0
+        └── FalseBlock:
+            └── IfStmt
+                ├── Condition: BinaryOp (<=)
+                │   ├── Left: income
+                │   └── Right: 500000
+                ├── TrueBlock:
+                │   └── AssignOp (=)
+                │       ├── Target: tax
+                │       └── Value: BinaryOp (*)
+                │           ├── Left: income
+                │           └── Right: 0.05
+                └── FalseBlock: [Nested Branches...]
