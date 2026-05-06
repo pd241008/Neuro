@@ -1,65 +1,147 @@
-🧠 NEURO: Zero-Trust Compiler Pipeline
-I. Project Overview
-NEURO is a blazing-fast, memory-safe, Domain-Specific Compiler built entirely in Rust. Unlike general-purpose compilers (GCC/Clang), NEURO is designed with a "paranoid security" model, acting as a strict gatekeeper for high-stakes execution (e.g., financial systems, smart contracts, or infrastructure automation).
 
-Core Differentiators:
+<h1 align="center">🧠 NEURO</h1>
 
-World-Class DX (Developer Experience): Employs visually stunning, color-coded terminal interfaces and precise, tutor-like error reporting.
+<p align="center">
+  <strong>The Zero-Trust, Memory-Safe Compiler Pipeline</strong>
+</p>
 
-Domain-Specific Constraints: Eliminates general-purpose vulnerabilities by strictly defining what the user can and cannot express.
+<p align="center">
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Orchestrator-Rust-orange.svg?style=flat-square&logo=rust" alt="Rust"></a>
+  <a href="https://dotnet.microsoft.com/en-us/languages/csharp"><img src="https://img.shields.io/badge/Frontend-C%23-239120.svg?style=flat-square&logo=c-sharp" alt="C#"></a>
+  <a href="https://isocpp.org/"><img src="https://img.shields.io/badge/Backend-C%2B%2B-00599C.svg?style=flat-square&logo=c%2B%2B" alt="C++"></a>
+  <a href="https://en.wikipedia.org/wiki/C_(programming_language)"><img src="https://img.shields.io/badge/Runtime-C-A8B9CC.svg?style=flat-square&logo=c" alt="C"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License"></a>
+</p>
 
-Zero-Trust Middle-End: Mathematically guarantees logic and memory safety before a single line of machine code is generated.
+---
 
-II. System Architecture (The Rust Workspace)
-The pipeline is divided into three isolated micro-architectures compiled into a single binary.
+## 🚀 Overview
 
-neuro_cli (The Orchestrator): The command-line interface. Handles file I/O, progress visuals, multi-threading, and triggers the compilation phases.
+**NEURO** is a blazing-fast, memory-safe, polyglot Compiler Pipeline built with **Rust**, **C#**, **C++**, and **C**. Designed with a **"security-first"** philosophy, NEURO acts as a strict validator for execution-critical software, ensuring memory safety and logical consistency at the language level.
 
-neuro_core (The Analyst): The front-end and middle-end. Responsible for Lexing, Parsing, Abstract Syntax Tree (AST) construction, and the Zero-Trust Security Audit.
+### Why NEURO?
 
-neuro_codegen (The Translator): The back-end. Ingests the mathematically proven AST and lowers it into highly optimized target code (C or LLVM IR).
+*   **⚡ World-Class DX**: Visually stunning terminal interfaces and precise, tutor-like error reporting using `miette`.
+*   **🛡️ Zero-Trust Middle-End**: Mathematically guarantees logic and memory safety before a single line of target code is generated.
+*   **🔒 Domain-Specific Constraints**: Eliminates general-purpose vulnerabilities by strictly defining expression boundaries.
 
-III. Development Roadmap
-Phase 1: Architecture & Scaffolding [COMPLETED ✅]
-[x] Define multi-language vs. single-language trade-offs.
+---
 
-[x] Scaffold the Rust Workspace (cargo new).
+## 🏗️ System Architecture
 
-[x] Wire local crate dependencies.
+The pipeline is divided into three isolated micro-architectures compiled into a single workspace.
 
-[x] Build the CLI routing and Cyberpunk-style terminal visuals using clap and indicatif.
+```mermaid
+graph LR
+    A[Source Code] --> B(neuro_cli - Rust)
+    B --> C(frontend - C#)
+    subgraph frontend [The Lexer & Parser]
+        C --> C1[Lexing]
+        C1 --> C2[Parsing]
+        C2 --> C3[Raw AST]
+    end
+    C3 --> D(analyzer - Rust)
+    subgraph analyzer [The Auditor]
+        D --> D1[Security Audit]
+        D1 --> D2[Verified AST]
+    end
+    D2 --> E(backend - C++)
+    subgraph backend [The Translator]
+        E --> E1[Lowering]
+        E1 --> E2[LLVM IR]
+    end
+    E2 --> F[Executable]
+    F -.-> G(runtime - C)
+    
+    style frontend fill:#1e1e1e,stroke:#239120,stroke-width:2px
+    style analyzer fill:#1e1e1e,stroke:#f74c00,stroke-width:2px
+    style backend fill:#1e1e1e,stroke:#00599c,stroke-width:2px
+```
 
-Phase 2: Defining the Domain-Specific Language (DSL) [NEXT]
-[ ] Syntax Design: Map out the exact keywords, operators, and data types our language will use (e.g., SECURE_TRANSACTION, AUDIT_LOG, REQUIRE).
+### Modules
 
-[ ] Grammar Specification: Write the formal rules (EBNF) for how tokens combine into statements.
+1.  **`neuro_cli` (The Orchestrator) [Rust]**: Handles file I/O, progress visuals, multi-threading, and triggers the compilation phases.
+2.  **`frontend` (The Lexer & Parser) [C#]**: Responsible for lexical analysis, hand-written recursive descent parsing, and initial error reporting.
+3.  **`analyzer` (The Security Auditor) [Rust]**: Performs the Zero-Trust Security Audit, memory-safety checks, and AST validation.
+4.  **`backend` (The Translator) [C++]**: Ingests the proven AST and lowers it into highly optimized target code (LLVM IR).
+5.  **`runtime` (The Foundation) [C]**: Provides low-level memory management and I/O primitives for the generated executables.
 
-[ ] Security Rules: Define the specific things our compiler will reject (e.g., no unbound loops, strict type enforcement on money).
+---
 
-Phase 3: The Front-End (neuro_core)
-[ ] The Lexer (Scanner): Write the pure Rust memory-scanner to convert raw source text into a stream of Token structs, tracking exact line/column data.
+## 🛠️ Getting Started
 
-[ ] The Parser: Build a Hand-Written Recursive Descent Parser to convert the token stream into an Abstract Syntax Tree (AST) in memory.
+### Prerequisites
 
-[ ] DX Integration: Integrate the miette crate so that if parsing fails, the terminal prints a beautiful snippet highlighting the exact typo.
+*   **Rust**: Latest stable version (via `rustup`)
+*   **.NET SDK**: 6.0+ (for the C# Frontend)
+*   **CMake & C++ Compiler**: GCC/Clang/MSVC (for the C++ Backend)
+*   **LLVM**: Development headers (required by the backend)
+*   **Protobuf Compiler**: `protoc` (for shared AST definitions)
 
-Phase 4: The Zero-Trust Middle-End (neuro_core)
-[ ] Symbol Table Generation: Track variable scopes, types, and immutability.
+### Installation
 
-[ ] Semantic Analysis: Verify that mathematical operations make sense (e.g., you cannot multiply a String by a Float).
+```bash
+# Clone the repository
+git clone https://github.com/pd241008/neuro-compiler.git
+cd neuro-compiler
 
-[ ] The Security Auditor: Traverse the AST to enforce our paranoid constraints (e.g., ensuring a transaction has a receiver before funds are moved).
+# Build the project
+cargo build --release
+```
 
-Phase 5: The Back-End (neuro_codegen)
-[ ] AST Ingestion: Pass the verified AST from neuro_core to neuro_codegen.
+### Usage
 
-[ ] Target Translation: Traverse the tree and emit highly optimized, secure target code. (We will start by emitting secure C code, with room to upgrade to LLVM later).
+```bash
+./target/release/neuro compile example.nro
+```
 
-[ ] Executable Compilation: Have neuro_cli automatically call the system linker (GCC/Clang) to turn the generated code into a final standalone executable.
+---
 
-Phase 6: Polish & Production Release
-[ ] Integration Testing: Write automated test suites to ensure the compiler catches bad code and correctly compiles good code.
+## 🗺️ Development Roadmap
 
-[ ] Benchmarking: Optimize the parser and lexer to handle 100,000+ lines of code in milliseconds.
+### Phase 1: Architecture & Scaffolding `[COMPLETED ✅]`
+- [x] Scaffold Rust Workspace.
+- [x] Wire crate dependencies.
+- [x] Cyberpunk-style terminal visuals (`clap`, `indicatif`).
 
-[ ] Documentation: Finalize the language reference manual.
+### Phase 2: Domain-Specific Language (DSL) `[IN PROGRESS 🚧]`
+- [ ] **Syntax Design**: Mapping keywords (`FN`, `LET`, `MUT`, `TYPE`).
+- [ ] **Grammar Specification**: Formal EBNF rules.
+- [ ] **Security Rules**: Defining rejection criteria for unsafe patterns.
+
+### Phase 3: The Front-End (`neuro_core`)
+- [ ] **The Lexer**: High-performance Rust memory-scanner.
+- [ ] **The Parser**: Hand-written recursive descent parser.
+- [ ] **DX Integration**: `miette` error reporting.
+
+### Phase 4: Zero-Trust Middle-End
+- [ ] **Symbol Table**: Scope and type tracking.
+- [ ] **Semantic Analysis**: Mathematical consistency checks.
+- [ ] **Security Auditor**: AST traversal for paranoid constraints.
+
+### Phase 5: The Back-End (`neuro_codegen`)
+- [ ] **AST Ingestion**: Secure transfer to codegen.
+- [ ] **Target Translation**: Emission of secure C/LLVM code.
+- [ ] **Automated Linking**: Final binary generation.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📜 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+<p align="center">
+  Built with 🦀 and ☕ by the NEURO Team
+</p>
