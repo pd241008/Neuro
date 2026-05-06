@@ -65,6 +65,7 @@ graph LR
 3.  **`analyzer` (The Security Auditor) [Rust]**: Performs the Zero-Trust Security Audit, memory-safety checks, and AST validation.
 4.  **`backend` (The Translator) [C++]**: Ingests the proven AST and lowers it into highly optimized target code (LLVM IR).
 5.  **`runtime` (The Foundation) [C]**: Provides low-level memory management and I/O primitives for the generated executables.
+6.  **`compiler` (Legacy C Foundation) [C]**: A Lex/Yacc based foundational compiler engine for prototyping and legacy support.
 
 ---
 

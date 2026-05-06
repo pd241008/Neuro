@@ -6,11 +6,9 @@
 extern int yylex();
 void yyerror(const char *s);
 
-// This global pointer will hold the very top of our finished tree
 ASTNode* root_node;
 %}
 
-/* We now tell Yacc that tokens can hold strings OR AST Nodes */
 %union { 
     char* str; 
     struct ASTNode* node; 
@@ -19,13 +17,11 @@ ASTNode* root_node;
 %token <str> ID NUM STRING
 %token INT FLOAT IF ELSE RETURN PRINTF SCANF LEQ
 
-/* Define the return types of our grammatical rules */
-%type <node> stmts stmt
+%type <node> stmts stmt expr
 
 %%
 program:
     INT ID '(' ')' '{' decls stmts '}' { 
-        // We reached the top of the program! Save the tree.
         root_node = $7; 
     }
     ;
@@ -51,25 +47,27 @@ stmt:
     | PRINTF '(' STRING ',' ID ')' ';' {
         $$ = make_printf_node($5);
     }
-    | ID '=' NUM ';' {
-        $$ = make_assign_node($1, make_num_node($3));
+    | ID '=' expr ';' {
+        $$ = make_assign_node($1, $3);
     }
-    | ID '=' ID '*' NUM ';' {
-        ASTNode* math = make_math_node(NODE_MULTIPLY, make_var_node($3), make_num_node($5));
-        $$ = make_assign_node($1, math);
+    | IF '(' expr LEQ expr ')' stmt {
+        $$ = make_if_node($3, $5, $7, NULL);
     }
-    | IF '(' ID LEQ NUM ')' stmt {
-        $$ = make_if_node(make_var_node($3), make_num_node($5), $7, NULL);
-    }
-    | IF '(' ID LEQ NUM ')' stmt ELSE stmt {
-        $$ = make_if_node(make_var_node($3), make_num_node($5), $7, $9);
+    | IF '(' expr LEQ expr ')' stmt ELSE stmt {
+        $$ = make_if_node($3, $5, $7, $9);
     }
     | '{' stmts '}' {
         $$ = $2;
     }
-    | RETURN NUM ';' {
-        $$ = NULL; // Ignored for simplicity in this demo
+    | RETURN expr ';' {
+        $$ = NULL; 
     }
+    ;
+
+expr:
+    ID { $$ = make_var_node($1); }
+    | NUM { $$ = make_num_node($1); }
+    | expr '*' expr { $$ = make_math_node(NODE_MULTIPLY, $1, $3); }
     ;
 %%
 

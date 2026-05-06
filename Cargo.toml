@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "neuro_cli",
+    "analyzer",
+]
+resolver = "2"
