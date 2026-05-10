@@ -5,6 +5,7 @@ use miette::{Diagnostic, Result};
 use thiserror::Error;
 use std::path::PathBuf;
 use std::time::Duration;
+use std::process::Command;
 
 #[derive(Error, Debug, Diagnostic)]
 #[error("Compilation failed: {message}")]
@@ -38,6 +39,8 @@ enum Commands {
         #[arg(value_name = "AST_FILE")]
         file: PathBuf,
     },
+    /// Launches the interactive Neuro GUI/REPL
+    Gui,
 }
 
 #[tokio::main]
@@ -51,7 +54,34 @@ async fn main() -> Result<()> {
         Commands::Audit { file } => {
             println!("{} Auditing AST: {:?}", "🛡️".bold(), file);
         }
+        Commands::Gui => {
+            run_gui()?;
+        }
     }
+
+    Ok(())
+}
+
+fn find_dotnet() -> String {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let local_dotnet = format!("{}/.dotnet/dotnet", home);
+    if std::path::Path::new(&local_dotnet).exists() {
+        return local_dotnet;
+    }
+    "dotnet".to_string()
+}
+
+fn run_gui() -> Result<()> {
+    println!("{}", "\n🧠 LAUNCHING NEURO GUI...".cyan().bold());
+    
+    // The frontend is a C# .NET project located in the `frontend` directory.
+    let mut child = Command::new(find_dotnet())
+        .arg("run")
+        .current_dir("frontend")
+        .spawn()
+        .map_err(|e| miette::miette!("Failed to launch C# frontend: {}", e))?;
+
+    child.wait().map_err(|e| miette::miette!("GUI exited with error: {}", e))?;
 
     Ok(())
 }
@@ -71,7 +101,27 @@ async fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
 
     // 1. Frontend Phase (C#)
     pb.set_message("Frontend: Parsing & Lexing [C#]");
-    tokio::time::sleep(Duration::from_millis(800)).await;
+    
+    let file_path_str = file.canonicalize()
+        .unwrap_or_else(|_| file.clone())
+        .to_string_lossy()
+        .to_string();
+        
+    let frontend_output = Command::new(find_dotnet())
+        .arg("run")
+        .arg("--") // pass arguments to the C# application
+        .arg(&file_path_str)
+        .current_dir("frontend")
+        .output()
+        .map_err(|e| miette::miette!("Failed to invoke C# frontend: {}", e))?;
+
+    if !frontend_output.status.success() {
+        let err_msg = String::from_utf8_lossy(&frontend_output.stdout).to_string() + 
+                      &String::from_utf8_lossy(&frontend_output.stderr).to_string();
+        pb.finish_with_message("Frontend compilation failed");
+        return Err(miette::miette!("Frontend Error:\n{}", err_msg.trim()));
+    }
+
     pb.inc(1);
 
     // 2. Security Audit (Rust)
