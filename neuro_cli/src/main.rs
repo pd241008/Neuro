@@ -71,17 +71,63 @@ fn find_dotnet() -> String {
     "dotnet".to_string()
 }
 
+fn which_binary(name: &str) -> bool {
+    Command::new("which")
+        .arg(name)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 fn run_gui() -> Result<()> {
     println!("{}", "\n🧠 LAUNCHING NEURO GUI...".cyan().bold());
     
-    // The frontend is a C# .NET project located in the `frontend` directory.
-    let mut child = Command::new(find_dotnet())
-        .arg("run")
-        .current_dir("frontend")
-        .spawn()
-        .map_err(|e| miette::miette!("Failed to launch C# frontend: {}", e))?;
+    let dotnet_cmd = find_dotnet();
+    let current_dir = "frontend";
 
-    child.wait().map_err(|e| miette::miette!("GUI exited with error: {}", e))?;
+    // Detect terminal emulator and define arguments to run our dotnet command inside it
+    let terminals = vec![
+        ("xterm", vec!["-T", "Neuro GUI", "-e", &dotnet_cmd, "run"]),
+        ("gnome-terminal", vec!["--title=Neuro GUI", "--", &dotnet_cmd, "run"]),
+        ("konsole", vec!["--title", "Neuro GUI", "-e", &dotnet_cmd, "run"]),
+        ("xfce4-terminal", vec!["--title=Neuro GUI", "-x", &dotnet_cmd, "run"]),
+        ("alacritty", vec!["-t", "Neuro GUI", "-e", &dotnet_cmd, "run"]),
+        ("kitty", vec!["--title", "Neuro GUI", &dotnet_cmd, "run"]),
+    ];
+
+    let mut spawned_in_terminal = false;
+
+    for (term_bin, args) in terminals {
+        if which_binary(term_bin) {
+            println!("{} Spawning dedicated terminal using: {}", "»".bright_black(), term_bin.yellow());
+            let mut cmd = Command::new(term_bin);
+            cmd.args(&args).current_dir(current_dir);
+            match cmd.spawn() {
+                Ok(mut child) => {
+                    child.wait().map_err(|e| miette::miette!("Dedicated terminal exited with error: {}", e))?;
+                    spawned_in_terminal = true;
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Failed to spawn terminal emulator {}: {}", term_bin, e);
+                }
+            }
+        }
+    }
+
+    if !spawned_in_terminal {
+        println!("{} No terminal emulators found or failed to spawn. Falling back to active terminal...", "»".yellow());
+        // Fallback: The frontend is a C# .NET project located in the `frontend` directory.
+        let mut child = Command::new(&dotnet_cmd)
+            .arg("run")
+            .current_dir(current_dir)
+            .spawn()
+            .map_err(|e| miette::miette!("Failed to launch C# frontend: {}", e))?;
+
+        child.wait().map_err(|e| miette::miette!("GUI exited with error: {}", e))?;
+    }
 
     Ok(())
 }
