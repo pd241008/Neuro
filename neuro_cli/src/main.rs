@@ -172,11 +172,13 @@ async fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
 
     // 2. Security Audit (Rust)
     pb.set_message("Middle-End: Zero-Trust Security Audit [Rust]");
+    // TODO (CLI Wiring): Actually pass the AST from frontend to `analyzer::audit_ast()` and `borrow_check::verify_borrow_rules()`
     tokio::time::sleep(Duration::from_millis(1200)).await;
     pb.inc(1);
 
     // 3. Backend Generation (C++)
     pb.set_message("Back-End: LLVM IR Generation [C++]");
+    // TODO (CLI Wiring): Invoke the C++ backend passing the verified AST, and capture the LLVM IR output
     tokio::time::sleep(Duration::from_millis(1000)).await;
     pb.inc(1);
 
