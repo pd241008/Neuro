@@ -53,13 +53,18 @@ namespace Neuro.Frontend {
 
                 try {
                     Parser parser = new Parser(tokens);
-                    parser.ParseProgram();
+                    var program = parser.ParseProgram();
+                    
                     if (interactive) {
                         Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("✅ Parsing Successful!");
+                        Console.WriteLine("✅ Parsing Successful! AST generated.");
                         Console.ResetColor();
+                    } else {
+                        // Serialize AST for Phase 4 (Rust Analyzer)
+                        using var output = File.Create("output.ast");
+                        Google.Protobuf.MessageExtensions.WriteTo(program, output);
                     }
-                } catch (Exception pEx) {
+                } catch (ParseException pEx) {
                     if (interactive) {
                         Console.ForegroundColor = ConsoleColor.Yellow;
                         Console.WriteLine($"[Parser Failed] {pEx.Message}");

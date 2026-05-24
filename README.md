@@ -61,7 +61,7 @@ graph LR
 ### Modules
 
 1.  **`neuro_cli` (The Orchestrator) [Rust]**: Handles file I/O, progress visuals, multi-threading, and triggers the compilation phases.
-2.  **`frontend` (The Lexer & Parser) [C#]**: Responsible for lexical analysis, hand-written recursive descent parsing, and initial error reporting.
+2.  **`frontend` (The Lexer & Parser) [C#]**: Responsible for lexical analysis, hand-written recursive descent parsing, and initial error reporting. Generates the initial Protobuf AST.
 3.  **`analyzer` (The Security Auditor) [Rust]**: Performs the Zero-Trust Security Audit, memory-safety checks, and AST validation.
 4.  **`backend` (The Translator) [C++]**: Ingests the proven AST and lowers it into highly optimized target code (LLVM IR).
 5.  **`runtime` (The Foundation) [C]**: Provides low-level memory management and I/O primitives for the generated executables.
@@ -105,22 +105,22 @@ cargo build --release
 - [x] Wire crate dependencies.
 - [x] Cyberpunk-style terminal visuals (`clap`, `indicatif`).
 
-### Phase 2: Domain-Specific Language (DSL) `[IN PROGRESS 🚧]`
-- [ ] **Syntax Design**: Mapping keywords (`FN`, `LET`, `MUT`, `TYPE`).
-- [ ] **Grammar Specification**: Formal EBNF rules.
-- [ ] **Security Rules**: Defining rejection criteria for unsafe patterns.
+### Phase 2: Domain-Specific Language (DSL) `[COMPLETED ✅]`
+- [x] **Syntax Design**: Mapping keywords (`fn`, `let`, `mut`, `type`).
+- [x] **Grammar Specification**: Formal EBNF rules.
+- [x] **Security Rules**: Defining rejection criteria for unsafe patterns.
 
-### Phase 3: The Front-End (`neuro_core`)
-- [ ] **The Lexer**: High-performance Rust memory-scanner.
-- [ ] **The Parser**: Hand-written recursive descent parser.
-- [ ] **DX Integration**: `miette` error reporting.
+### Phase 3: The Front-End (`frontend`)
+- [ ] **The Lexer**: High-performance C# memory-scanner with offset tracking.
+- [ ] **The Parser**: Hand-written recursive descent parser outputting Protobuf AST.
+- [ ] **DX Integration**: Structure errors for `miette` reporting in Rust.
 
 ### Phase 4: Zero-Trust Middle-End
 - [ ] **Symbol Table**: Scope and type tracking.
 - [ ] **Semantic Analysis**: Mathematical consistency checks.
 - [ ] **Security Auditor**: AST traversal for paranoid constraints.
 
-### Phase 5: The Back-End (`neuro_codegen`)
+### Phase 5: The Back-End (`backend`)
 - [ ] **AST Ingestion**: Secure transfer to codegen.
 - [ ] **Target Translation**: Emission of secure C/LLVM code.
 - [ ] **Automated Linking**: Final binary generation.

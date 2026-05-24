@@ -1,0 +1,28 @@
+/* Neuro Formal Grammar Specification */
+
+Program         ::= { FunctionDecl }
+FunctionDecl    ::= "fn" Id "(" [ParamList] ")" ["->" Type] Block
+ParamList       ::= Param { "," Param }
+Param           ::= Id ":" Type
+
+Block           ::= "{" { Statement } "}"
+
+Statement       ::= LetStmt | AssignStmt | IfStmt | ReturnStmt | ExprStmt
+
+LetStmt         ::= "let" ["mut"] Id ":" Type "=" Expr ";"
+AssignStmt      ::= Id "=" Expr ";"
+IfStmt          ::= "if" "(" Expr ")" Block [ "else" Block ]
+ReturnStmt      ::= "return" Expr ";"
+ExprStmt        ::= Expr ";"
+
+Expr            ::= EqualityExpr
+EqualityExpr    ::= RelationalExpr { ("==" | "!=") RelationalExpr }
+RelationalExpr  ::= AdditiveExpr { ("<" | ">" | "<=" | ">=") AdditiveExpr }
+AdditiveExpr    ::= MultiplicativeExpr { ("+" | "-") MultiplicativeExpr }
+MultiplicativeExpr ::= PrimaryExpr { ("*" | "/") PrimaryExpr }
+
+PrimaryExpr     ::= Num | FloatNum | Id | "(" Expr ")" | FuncCall
+FuncCall        ::= Id "(" [ArgList] ")"
+ArgList         ::= Expr { "," Expr }
+
+Type            ::= "int" | "float" | "bool"
