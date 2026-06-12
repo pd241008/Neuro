@@ -95,7 +95,7 @@ public class Parser
         
         Match(TokenType.Minus);
         Match(TokenType.GreaterThan);
-        var typeToken = Match(TokenType.Id);
+        var typeToken = MatchType();
         function.ReturnType = new Type { Kind = ParseType(typeToken.Value) };
 
         Match(TokenType.LBrace);
@@ -116,7 +116,7 @@ public class Parser
             if (CurrentToken?.Type == TokenType.Mut) Match(TokenType.Mut);
             var id = Match(TokenType.Id);
             Match(TokenType.Colon);
-            var typeToken = Match(TokenType.Id);
+            var typeToken = MatchType();
             Match(TokenType.Assign);
             var expr = ParseExpression();
             Match(TokenType.SemiColon);
@@ -187,6 +187,23 @@ public class Parser
             $"Expected '{expected}', but encountered '{actual?.Type.ToString() ?? "EOF"}'",
             actual ?? (_tokens.Count > 0 ? _tokens[_tokens.Count - 1] : null),
             $"Expected '{expected}' here"
+        );
+    }
+
+    private Token MatchType() 
+    {
+        Token? actual = CurrentToken;
+        if (actual != null && (actual.Type == TokenType.Id || actual.Type == TokenType.Int || actual.Type == TokenType.Float || actual.Type == TokenType.Type)) 
+        {
+            _index++;
+            return actual;
+        }
+
+        throw new ParseException(
+            "neuro::syntax::mismatched_type",
+            $"Expected a type, but encountered '{actual?.Type.ToString() ?? "EOF"}'",
+            actual ?? (_tokens.Count > 0 ? _tokens[_tokens.Count - 1] : null),
+            "Expected a type identifier here"
         );
     }
 }
