@@ -35,7 +35,7 @@ public class Lexer {
         { "int", TokenType.Int }, { "float", TokenType.Float },
         { "if", TokenType.If }, { "else", TokenType.Else },
         { "return", TokenType.Return }, { "scanf", TokenType.Scanf },
-        { "printf", TokenType.Printf }, { "fun", TokenType.Fn }, { "mut", TokenType.Mut },
+        { "printf", TokenType.Printf }, { "fn", TokenType.Fn }, { "mut", TokenType.Mut },
         { "let", TokenType.Let }, { "type", TokenType.Type }
     };
 
