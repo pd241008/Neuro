@@ -1,5 +1,6 @@
 pub mod borrow_check;
 pub mod symbol_table;
+pub mod semantic_analysis;
 
 use shared_ast::Program;
 use prost::Message;

@@ -123,10 +123,16 @@ cargo build --release
 - [x] Variable lookup across current and parent scopes.
 - [x] Offset tracking per variable for backend code generation.
 
-#### Sub-Phase 4.2: Protobuf AST Integration `[IN PROGRESS 🚧]`
-- [ ] Generate Rust types from `shared_ast/ast.proto` (prost) in shared workspace crate.
-- [ ] Implement AST deserialization in `audit_ast()`.
-- [ ] Define the AST visitor/traversal interface.
+#### Sub-Phase 4.2: Protobuf AST Integration `[COMPLETED ✅]`
+- [x] Generate Rust types from `shared_ast/ast.proto` (prost) in shared workspace crate.
+- [x] Implement AST deserialization in `audit_ast()`.
+- [x] Define the AST visitor/traversal interface in `semantic_analysis.rs`.
+
+#### Sub-Phase 4.3: Semantic Analysis — Type System & Expression Validation `[IN PROGRESS 🚧]`
+- [ ] Recursive AST traversal for all statement/expression nodes.
+- [ ] Type resolution for literals, variables, and operations.
+- [ ] Strict type mismatch detection (no implicit coercion — e.g., `float` → `int`).
+- [ ] Function return type validation against declared return type.
 
 ### Phase 5: The Back-End (`backend`)
 - [ ] **AST Ingestion**: Secure transfer to codegen.

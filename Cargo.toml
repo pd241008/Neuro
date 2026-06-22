@@ -3,5 +3,6 @@ members = [
     "neuro_cli",
     "analyzer",
     "shared_ast",
+    "tests",
 ]
 resolver = "2"
