@@ -1,0 +1,17 @@
+[package]
+name = "tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+analyzer = { path = "../analyzer" }
+shared_ast = { path = "../shared_ast" }
+
+[[test]]
+name = "symbol_table"
+path = "symbol_table_tests.rs"
+
+[[test]]
+name = "semantic_analysis"
+path = "semantic_analysis_tests.rs"

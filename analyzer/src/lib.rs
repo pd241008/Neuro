@@ -1,14 +1,20 @@
 pub mod borrow_check;
+pub mod symbol_table;
+pub mod semantic_analysis;
 
-// Migrated logic from compiler/src/ast.c and compiler/src/symbol_table.c
-pub fn audit_ast() {
+use shared_ast::Program;
+use prost::Message;
+
+pub fn audit_ast(input: &[u8]) -> Result<Vec<u8>, String> {
     println!("Auditing AST for memory safety...");
-    // TODO (Phase 4): Implement Symbol Table tracking and scope resolution for new DSL nodes
-    // TODO (Phase 4): Implement Semantic Analysis (type checking, valid variable usage)
-    // TODO (Phase 4): Invoke `borrow_check::verify_borrow_rules()` on appropriate AST nodes
-    // Semantic Checks ported from legacy:
-    // 1. Maintain Symbol Table (offsets, definitions)
-    // 2. Resolve variable references during AST traversal
-    // 3. Ensure variable definitions exist before assignment/usage
-    // 4. Validate types in operations (e.g. MULTIPLY)
+
+    let program = Program::decode(input)
+        .map_err(|e| format!("Failed to deserialize AST: {}", e))?;
+
+    semantic_analysis::analyze_ast(&program)?;
+
+    let verified = program.encode_to_vec();
+
+    println!("AST audit complete: {} function(s) verified", program.functions.len());
+    Ok(verified)
 }
