@@ -74,7 +74,7 @@ graph LR
 ### Prerequisites
 
 *   **Rust**: Latest stable version (via `rustup`)
-*   **.NET SDK**: 6.0+ (for the C# Frontend)
+*   **.NET SDK**: 8.0+ (for the C# Frontend)
 *   **CMake & C++ Compiler**: GCC/Clang/MSVC (for the C++ Backend)
 *   **LLVM**: Development headers (required by the backend)
 *   **Protobuf Compiler**: `protoc` (for shared AST definitions)
