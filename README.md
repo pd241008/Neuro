@@ -128,11 +128,11 @@ cargo build --release
 - [x] Implement AST deserialization in `audit_ast()`.
 - [x] Define the AST visitor/traversal interface in `semantic_analysis.rs`.
 
-#### Sub-Phase 4.3: Semantic Analysis — Type System & Expression Validation `[IN PROGRESS 🚧]`
-- [ ] Recursive AST traversal for all statement/expression nodes.
-- [ ] Type resolution for literals, variables, and operations.
-- [ ] Strict type mismatch detection (no implicit coercion — e.g., `float` → `int`).
-- [ ] Function return type validation against declared return type.
+#### Sub-Phase 4.3: Semantic Analysis — Type System & Expression Validation `[COMPLETED ✅]`
+- [x] Recursive AST traversal for all statement/expression nodes.
+- [x] Type resolution for literals, variables, and operations.
+- [x] Strict type mismatch detection (no implicit coercion — e.g., `float` → `int`).
+- [x] Function return type validation against declared return type.
 
 ### Phase 5: The Back-End (`backend`)
 - [ ] **AST Ingestion**: Secure transfer to codegen.

@@ -11,6 +11,8 @@ pub fn audit_ast(input: &[u8]) -> Result<Vec<u8>, String> {
     let program = Program::decode(input)
         .map_err(|e| format!("Failed to deserialize AST: {}", e))?;
 
+    semantic_analysis::analyze_ast(&program)?;
+
     let verified = program.encode_to_vec();
 
     println!("AST audit complete: {} function(s) verified", program.functions.len());

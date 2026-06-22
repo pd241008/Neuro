@@ -35,16 +35,17 @@ Files: `shared_ast/`, `analyzer/src/lib.rs`
 - [x] Implement `audit_ast(input: &[u8])` with protobuf deserialization
 - [x] AST visitor/traversal interface defined in `semantic_analysis.rs`
 
-### Sub-Phase 4.3: Semantic Analysis — Type System & Expression Validation `[IN PROGRESS]`
-Files: `analyzer/src/semantic_analysis.rs`
-- [ ] Recursive AST traversal for all statement/expression nodes
-- [ ] Type resolution for literals, variables, binary/unary ops, function calls
-- [ ] Strict type mismatch detection (no implicit coercion)
-- [ ] Function return type validation
-- [ ] Control flow condition validation (if/while require bool)
-- [ ] Variable declaration type checking (declared type vs initializer)
-- [ ] Immutable assignment prevention
-- [ ] Integration tests in `tests/semantic_analysis_tests.rs`
+### Sub-Phase 4.3: Semantic Analysis — Type System & Expression Validation `[COMPLETED]`
+Files: `analyzer/src/semantic_analysis.rs`, `analyzer/src/lib.rs`
+- [x] Recursive AST traversal for all statement/expression nodes
+- [x] Type resolution for literals, variables, binary/unary ops, function calls
+- [x] Strict type mismatch detection (no implicit coercion)
+- [x] Function return type validation
+- [x] Control flow condition validation (if/while require bool)
+- [x] Variable declaration type checking (declared type vs initializer)
+- [x] Immutable assignment prevention
+- [x] `audit_ast()` wired to call `analyze_ast()` before returning
+- [x] 17 integration tests in `tests/` — all passing
 
 ### Sub-Phase 4.4: Security Auditor — Borrow Checker Integration
 Status: `[NOT STARTED]`
