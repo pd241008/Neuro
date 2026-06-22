@@ -15,7 +15,7 @@ fn scope_hiding() {
     st.push_scope();
     st.insert("x", NeuroType::Float, false);
     assert_eq!(st.lookup("x").unwrap().type_, NeuroType::Float);
-    st.pop_scope();
+    let _ = st.pop_scope();
     assert_eq!(st.lookup("x").unwrap().type_, NeuroType::Int);
 }
 
@@ -51,6 +51,6 @@ fn scope_levels() {
     assert_eq!(st.scope_level(), 1);
     st.push_scope();
     assert_eq!(st.scope_level(), 2);
-    st.pop_scope();
+    let _ = st.pop_scope();
     assert_eq!(st.scope_level(), 1);
 }

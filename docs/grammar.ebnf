@@ -7,22 +7,26 @@ Param           ::= Id ":" Type
 
 Block           ::= "{" { Statement } "}"
 
-Statement       ::= LetStmt | AssignStmt | IfStmt | ReturnStmt | ExprStmt
+Statement       ::= LetStmt | AssignStmt | IfStmt | WhileStmt | ReturnStmt | ExprStmt
 
 LetStmt         ::= "let" ["mut"] Id ":" Type "=" Expr ";"
 AssignStmt      ::= Id "=" Expr ";"
 IfStmt          ::= "if" "(" Expr ")" Block [ "else" Block ]
-ReturnStmt      ::= "return" Expr ";"
+WhileStmt       ::= "while" "(" Expr ")" Block
+ReturnStmt      ::= "return" [Expr] ";"
 ExprStmt        ::= Expr ";"
 
-Expr            ::= EqualityExpr
+Expr            ::= LogicalOrExpr
+LogicalOrExpr   ::= LogicalAndExpr { "||" LogicalAndExpr }
+LogicalAndExpr  ::= EqualityExpr { "&&" EqualityExpr }
 EqualityExpr    ::= RelationalExpr { ("==" | "!=") RelationalExpr }
 RelationalExpr  ::= AdditiveExpr { ("<" | ">" | "<=" | ">=") AdditiveExpr }
 AdditiveExpr    ::= MultiplicativeExpr { ("+" | "-") MultiplicativeExpr }
-MultiplicativeExpr ::= PrimaryExpr { ("*" | "/") PrimaryExpr }
+MultiplicativeExpr ::= UnaryExpr { ("*" | "/") UnaryExpr }
+UnaryExpr       ::= ["-" | "!"] PrimaryExpr
 
-PrimaryExpr     ::= Num | FloatNum | Id | "(" Expr ")" | FuncCall
+PrimaryExpr     ::= Num | FloatNum | Bool | String | Id | "(" Expr ")" | FuncCall
 FuncCall        ::= Id "(" [ArgList] ")"
 ArgList         ::= Expr { "," Expr }
 
-Type            ::= "int" | "float" | "bool"
+Type            ::= "int" | "float" | "bool" | "string"

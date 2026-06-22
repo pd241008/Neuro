@@ -62,6 +62,7 @@ message VariableDeclaration {
     string name = 1;
     Type type = 2;
     Expression initializer = 3; // Optional
+    bool is_mutable = 4;
 }
 
 message Assignment {
