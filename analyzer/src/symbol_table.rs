@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use shared_ast::r#type::Kind;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NeuroType {
@@ -28,12 +29,23 @@ pub struct SymbolTable {
 impl NeuroType {
     pub fn from_proto_kind(kind: i32) -> Self {
         match kind {
-            0 => NeuroType::Int,
-            1 => NeuroType::Float,
-            2 => NeuroType::Bool,
-            3 => NeuroType::String,
-            4 => NeuroType::Void,
+            k if k == Kind::Int as i32 => NeuroType::Int,
+            k if k == Kind::Float as i32 => NeuroType::Float,
+            k if k == Kind::Bool as i32 => NeuroType::Bool,
+            k if k == Kind::String as i32 => NeuroType::String,
+            k if k == Kind::Void as i32 => NeuroType::Void,
             _ => NeuroType::Custom("unknown".to_string()),
+        }
+    }
+
+    pub fn to_proto_kind(&self) -> i32 {
+        match self {
+            NeuroType::Int => Kind::Int as i32,
+            NeuroType::Float => Kind::Float as i32,
+            NeuroType::Bool => Kind::Bool as i32,
+            NeuroType::String => Kind::String as i32,
+            NeuroType::Void => Kind::Void as i32,
+            NeuroType::Custom(_) => Kind::Custom as i32,
         }
     }
 }
@@ -50,9 +62,12 @@ impl SymbolTable {
         self.scopes.push(HashMap::new());
     }
 
-    pub fn pop_scope(&mut self) {
+    pub fn pop_scope(&mut self) -> Result<(), String> {
         if self.scopes.len() > 1 {
             self.scopes.pop();
+            Ok(())
+        } else {
+            Err("Cannot pop the global scope".to_string())
         }
     }
 
