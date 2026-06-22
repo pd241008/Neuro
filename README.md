@@ -117,11 +117,16 @@ cargo build --release
 
 ### Phase 4: Zero-Trust Middle-End `[IN PROGRESS 🚧]`
 
-#### Sub-Phase 4.1: Symbol Table Implementation `[IN PROGRESS 🚧]`
-- [ ] Scope stack management (`push_scope` / `pop_scope`) for block-level scoping.
-- [ ] Variable insertion with type, mutability, and initialization tracking.
-- [ ] Variable lookup across current and parent scopes.
-- [ ] Offset tracking per variable for backend code generation.
+#### Sub-Phase 4.1: Symbol Table Implementation `[COMPLETED ✅]`
+- [x] Scope stack management (`push_scope` / `pop_scope`) for block-level scoping.
+- [x] Variable insertion with type, mutability, and initialization tracking.
+- [x] Variable lookup across current and parent scopes.
+- [x] Offset tracking per variable for backend code generation.
+
+#### Sub-Phase 4.2: Protobuf AST Integration `[IN PROGRESS 🚧]`
+- [ ] Generate Rust types from `shared_ast/ast.proto` (prost) in shared workspace crate.
+- [ ] Implement AST deserialization in `audit_ast()`.
+- [ ] Define the AST visitor/traversal interface.
 
 ### Phase 5: The Back-End (`backend`)
 - [ ] **AST Ingestion**: Secure transfer to codegen.
