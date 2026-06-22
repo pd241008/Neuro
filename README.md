@@ -116,9 +116,12 @@ cargo build --release
 - [x] **DX Integration**: Structure errors for `miette` reporting in Rust.
 
 ### Phase 4: Zero-Trust Middle-End `[IN PROGRESS 🚧]`
-- [ ] **Symbol Table**: Scope and type tracking.
-- [ ] **Semantic Analysis**: Mathematical consistency checks.
-- [ ] **Security Auditor**: AST traversal for paranoid constraints.
+
+#### Sub-Phase 4.1: Symbol Table Implementation `[IN PROGRESS 🚧]`
+- [ ] Scope stack management (`push_scope` / `pop_scope`) for block-level scoping.
+- [ ] Variable insertion with type, mutability, and initialization tracking.
+- [ ] Variable lookup across current and parent scopes.
+- [ ] Offset tracking per variable for backend code generation.
 
 ### Phase 5: The Back-End (`backend`)
 - [ ] **AST Ingestion**: Secure transfer to codegen.

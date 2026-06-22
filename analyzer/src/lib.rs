@@ -1,4 +1,5 @@
 pub mod borrow_check;
+pub mod symbol_table;
 
 // Migrated logic from compiler/src/ast.c and compiler/src/symbol_table.c
 pub fn audit_ast() {
