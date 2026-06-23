@@ -10,6 +10,5 @@ clap = { version = "4.0", features = ["derive"] }
 indicatif = "0.17"
 colored = "2.0"
 miette = { version = "5.5", features = ["fancy"] }
-tokio = { version = "1.0", features = ["full"] }
 which = "4.4"
 analyzer = { path = "../analyzer" }

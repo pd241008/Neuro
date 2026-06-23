@@ -63,14 +63,16 @@ Files: `analyzer/src/semantic_analysis.rs`, `analyzer/src/borrow_check.rs`
 - [x] Move semantics enforcement (move_variable on function call arguments)
 - [x] Declare variable tracking (declare_variable in visit_declaration + param insertion)
 - [x] Scope-based borrow expiry (expire_borrow at scope boundaries)
-- [x] 6 integration tests in `tests/borrow_check_tests.rs` -- all passing
+- [x] 10 integration tests in `tests/borrow_check_tests.rs` -- all passing
 
-### Sub-Phase 4.5: Analyzer Pipeline & Error Reporting
-Status: `[NOT STARTED]`
-Files: `neuro_cli/src/main.rs`, `analyzer/src/lib.rs`
-- [ ] Connect C# frontend --> deserialize --> analyze --> serialize
-- [ ] Rich error diagnostics with `miette`
-- [ ] Replace sleep stubs in pipeline
+### Sub-Phase 4.5: Analyzer Pipeline & Error Reporting `[COMPLETED]`
+Files: `neuro_cli/src/main.rs`, `analyzer/src/lib.rs`, `analyzer/src/error.rs`
+- [x] Connect C# frontend --> deserialize --> analyze --> serialize
+- [x] Rich error diagnostics with `miette` (NeuroError struct with miette::Diagnostic derive)
+- [x] Write verified AST to `target/neuro_output/output.verified.ast` (was discarded)
+- [x] Replace sleep stubs: C++ backend invocation (or placeholder LLVM IR), Clang linking (or skip)
+- [x] Audit command fully wired to read, analyze, and write verified output
+- [x] All error paths updated from `String` to `NeuroError` across entire analyzer crate
 
 ### Sub-Phase 4.6: Verified AST Serialization
 Status: `[NOT STARTED]`

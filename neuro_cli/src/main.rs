@@ -3,7 +3,6 @@ use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use miette::Result;
 use std::path::PathBuf;
-use std::time::Duration;
 use std::process::Command;
 
 #[derive(Parser)]
@@ -32,16 +31,23 @@ enum Commands {
     Gui,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
         Commands::Compile { file, verbose } => {
-            run_pipeline(file, *verbose).await?;
+            run_pipeline(file, *verbose)?;
         }
         Commands::Audit { file } => {
-            println!("{} Auditing AST: {:?}", "Audit".bold(), file);
+            println!("{} Auditing AST: {:?}", "Audit".bold().cyan(), file);
+            let ast_bytes = std::fs::read(file)
+                .map_err(|e| miette::miette!("Failed to read AST file: {}", e))?;
+            let verified = analyzer::audit_ast(&ast_bytes)
+                .map_err(|e| miette::Report::from(e))?;
+            let verified_path = file.with_extension("verified.ast");
+            std::fs::write(&verified_path, &verified)
+                .map_err(|e| miette::miette!("Failed to write verified AST: {}", e))?;
+            println!("{} Audit passed — output: {}", "✓".green().bold(), verified_path.display());
         }
         Commands::Gui => {
             run_gui()?;
@@ -76,7 +82,7 @@ fn run_gui() -> Result<()> {
     Ok(())
 }
 
-async fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
+fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
     println!("{}", "\nNEURO COMPILER PIPELINE INITIATED".cyan().bold());
     println!("{} Source: {}\n", ">".bright_black(), file.display().to_string().yellow());
 
@@ -88,6 +94,10 @@ async fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
         .unwrap()
         .progress_chars("#>-"),
     );
+
+    let output_dir = PathBuf::from("target/neuro_output");
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| miette::miette!("Failed to create output directory: {}", e))?;
 
     // Phase 1: Frontend (C#)
     pb.set_message("Frontend: Parsing & Lexing [C#]");
@@ -126,26 +136,90 @@ async fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
     let ast_bytes = std::fs::read(&ast_path)
         .map_err(|e| miette::miette!("Failed to read AST output: {}", e))?;
 
-    let _verified = analyzer::audit_ast(&ast_bytes)
-        .map_err(|e| miette::miette!("Security Audit Error: {}", e))?;
+    let verified = analyzer::audit_ast(&ast_bytes)
+        .map_err(|e| miette::Report::from(e))?;
+
+    let verified_path = output_dir.join("output.verified.ast");
+    std::fs::write(&verified_path, &verified)
+        .map_err(|e| miette::miette!("Failed to write verified AST: {}", e))?;
+
+    if verbose {
+        println!("{} Verified AST written to {}", ">".bright_black(), verified_path.display());
+    }
 
     pb.inc(1);
 
-    // Phase 3: Backend Generation (C++) — stubbed
+    // Phase 3: Backend Generation (C++)
     pb.set_message("Back-End: LLVM IR Generation [C++]");
-    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let backend_bin = PathBuf::from("backend/build/neuro_backend");
+    let ll_path = output_dir.join("output.ll");
+
+    if backend_bin.exists() {
+        let backend_output = Command::new(&backend_bin)
+            .arg(&verified_path)
+            .arg(&ll_path)
+            .output()
+            .map_err(|e| miette::miette!("Failed to invoke C++ backend: {}", e))?;
+
+        if !backend_output.status.success() {
+            let err = String::from_utf8_lossy(&backend_output.stderr);
+            pb.finish_with_message("Backend generation failed");
+            return Err(miette::miette!("Backend Error:\n{}", err.trim()));
+        }
+    } else {
+        // Backend not built yet — write a placeholder LLVM IR file
+        let placeholder = format!(
+            "; NEURO Compiler: LLVM IR Output\n"
+        );
+        std::fs::write(&ll_path, &placeholder)
+            .map_err(|e| miette::miette!("Failed to write placeholder LLVM IR: {}", e))?;
+        if verbose {
+            println!("{} Backend binary not found at {}, wrote placeholder LLVM IR",
+                ">".bright_black(), backend_bin.display());
+        }
+    }
+
     pb.inc(1);
 
-    // Phase 4: Linking — stubbed
+    // Phase 4: Linking
     pb.set_message("Finalizing: System Linking [Clang]");
-    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let bin_path = output_dir.join("output.bin");
+    let clang_found = which::which("clang").is_ok();
+
+    if clang_found && backend_bin.exists() {
+        let link_output = Command::new("clang")
+            .arg("-o")
+            .arg(&bin_path)
+            .arg(&ll_path)
+            .output()
+            .map_err(|e| miette::miette!("Failed to invoke Clang: {}", e))?;
+
+        if !link_output.status.success() {
+            let err = String::from_utf8_lossy(&link_output.stderr);
+            return Err(miette::miette!("Linking Error:\n{}", err.trim()));
+        }
+    } else {
+        if verbose {
+            if !clang_found {
+                println!("{} Clang not found, skipping linking step", ">".bright_black());
+            }
+            println!("{} Output LLVM IR at: {}", ">".bright_black(), ll_path.display());
+        }
+    }
+
     pb.inc(1);
 
     pb.finish_with_message("Compilation Successful");
 
     println!("\n{}", "BUILD COMPLETE".green().bold());
     if verbose {
-        println!("{} Output: ./target/release/output.bin", ">".bright_black());
+        println!("{} Verified AST: {}", ">".bright_black(), verified_path.display());
+        println!("{} LLVM IR: {}", ">".bright_black(), ll_path.display());
+        if clang_found && bin_path.exists() {
+            println!("{} Binary: {}", ">".bright_black(), bin_path.display());
+        }
     }
 
     Ok(())

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::error::NeuroError;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VariableState { 
@@ -58,24 +59,24 @@ impl BorrowChecker {
         None
     }
 
-    pub fn check_read(&self, var: &str) -> Result<(), String> {
+    pub fn check_read(&self, var: &str) -> Result<(), NeuroError> {
         if self.lookup_state(var) == Some(&VariableState::Moved) {
-            return Err(format!("Use of moved value `{}`", var));
+            return Err(NeuroError::analysis(format!("Use of moved value `{}`", var)));
         }
 
         if let Some(borrows) = self.active_borrows.get(var) {
             if borrows.iter().any(|b| b.borrow_type == BorrowType::Exclusive) {
-                return Err(format!("Cannot read `{}` while mutably borrowed", var));
+                return Err(NeuroError::analysis(format!("Cannot read `{}` while mutably borrowed", var)));
             }
         }
 
         Ok(())
     }
 
-    pub fn check_write(&self, var: &str) -> Result<(), String> {
+    pub fn check_write(&self, var: &str) -> Result<(), NeuroError> {
         if let Some(borrows) = self.active_borrows.get(var) {
             if !borrows.is_empty() {
-                return Err(format!("Cannot write to `{}` while it is borrowed", var));
+                return Err(NeuroError::analysis(format!("Cannot write to `{}` while it is borrowed", var)));
             }
         }
 
@@ -97,10 +98,10 @@ impl BorrowChecker {
         }
     }
 
-    pub fn move_variable(&mut self, var: &str) -> Result<(), String> {
+    pub fn move_variable(&mut self, var: &str) -> Result<(), NeuroError> {
         if let Some(borrows) = self.active_borrows.get(var) {
             if !borrows.is_empty() {
-                return Err(format!("Cannot move `{}` because it is borrowed", var));
+                return Err(NeuroError::analysis(format!("Cannot move `{}` because it is borrowed", var)));
             }
         }
 
@@ -113,7 +114,7 @@ impl BorrowChecker {
         Ok(())
     }
 
-    pub fn create_borrow(&mut self, owner: &str, borrower: String, borrow_type: BorrowType, duration: usize) -> Result<(), String> {
+    pub fn create_borrow(&mut self, owner: &str, borrower: String, borrow_type: BorrowType, duration: usize) -> Result<(), NeuroError> {
         match borrow_type {
             BorrowType::Shared => self.check_read(owner)?,
             BorrowType::Exclusive => self.check_write(owner)?,
