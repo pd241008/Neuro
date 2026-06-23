@@ -15,3 +15,7 @@ path = "symbol_table_tests.rs"
 [[test]]
 name = "semantic_analysis"
 path = "semantic_analysis_tests.rs"
+
+[[test]]
+name = "borrow_check"
+path = "borrow_check_tests.rs"

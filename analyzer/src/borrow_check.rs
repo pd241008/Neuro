@@ -1,15 +1,14 @@
-#![allow(dead_code)]
-
 use std::collections::HashMap;
+use crate::error::NeuroError;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum VariableState { 
+pub enum VariableState { 
     Valid,
     Moved,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum BorrowType {
+pub enum BorrowType {
     Shared,
     Exclusive,
 }
@@ -20,73 +19,102 @@ struct Borrow {
     lifetime_end: usize,
 }
 
-struct BorrowChecker {
-    variable_states: HashMap<String, VariableState>,
+pub struct BorrowChecker {
+    variable_states: Vec<HashMap<String, VariableState>>,
     active_borrows: HashMap<String, Vec<Borrow>>,
     current_line: usize,
 }
 
 impl BorrowChecker {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            variable_states: HashMap::new(),
+            variable_states: vec![HashMap::new()],
             active_borrows: HashMap::new(),
             current_line: 0,
         }
     }
 
-    fn expire_borrow(&mut self) {
+    pub fn push_scope(&mut self) {
+        self.variable_states.push(HashMap::new());
+    }
+
+    pub fn pop_scope(&mut self) {
+        if self.variable_states.len() > 1 {
+            self.variable_states.pop();
+        }
+    }
+
+    pub fn expire_borrow(&mut self) {
         for (_owner, borrows) in self.active_borrows.iter_mut() {
             borrows.retain(|b| b.lifetime_end > self.current_line);
         }
     }
 
-    fn check_read(&self, var: &str) -> Result<(), String> {
-        if self.variable_states.get(var) == Some(&VariableState::Moved) {
-            return Err(format!("Error: Use of moved value `{}`", var));
+    fn lookup_state(&self, var: &str) -> Option<&VariableState> {
+        for scope in self.variable_states.iter().rev() {
+            if let Some(state) = scope.get(var) {
+                return Some(state);
+            }
+        }
+        None
+    }
+
+    pub fn check_read(&self, var: &str) -> Result<(), NeuroError> {
+        if self.lookup_state(var) == Some(&VariableState::Moved) {
+            return Err(NeuroError::analysis(format!("Use of moved value `{}`", var)));
         }
 
         if let Some(borrows) = self.active_borrows.get(var) {
             if borrows.iter().any(|b| b.borrow_type == BorrowType::Exclusive) {
-                return Err(format!("Error: Cannot read `{}` while mutably borrowed", var));
+                return Err(NeuroError::analysis(format!("Cannot read `{}` while mutably borrowed", var)));
             }
         }
 
         Ok(())
     }
 
-    fn check_write(&self, var: &str) -> Result<(), String> {
-        if self.variable_states.get(var) == Some(&VariableState::Moved) {
-            return Err(format!("Error: Use of moved value `{}`", var));
-        }
-
+    pub fn check_write(&self, var: &str) -> Result<(), NeuroError> {
         if let Some(borrows) = self.active_borrows.get(var) {
             if !borrows.is_empty() {
-                return Err(format!("Error: Cannot write to `{}` while it is borrowed", var));
+                return Err(NeuroError::analysis(format!("Cannot write to `{}` while it is borrowed", var)));
             }
         }
 
         Ok(())
     }
 
-    fn declare_variable(&mut self, var: String) {
-        self.variable_states.insert(var, VariableState::Valid);
+    pub fn declare_variable(&mut self, var: String) {
+        if let Some(current) = self.variable_states.last_mut() {
+            current.insert(var, VariableState::Valid);
+        }
     }
 
-    fn move_variable(&mut self, var: &str) -> Result<(), String> {
-        self.check_read(var)?;
+    pub fn set_valid(&mut self, var: &str) {
+        for scope in self.variable_states.iter_mut().rev() {
+            if let Some(state) = scope.get_mut(var) {
+                *state = VariableState::Valid;
+                return;
+            }
+        }
+    }
 
+    pub fn move_variable(&mut self, var: &str) -> Result<(), NeuroError> {
         if let Some(borrows) = self.active_borrows.get(var) {
             if !borrows.is_empty() {
-                return Err(format!("Error: Cannot move `{}` because it is borrowed", var));
+                return Err(NeuroError::analysis(format!("Cannot move `{}` because it is borrowed", var)));
             }
         }
 
-        self.variable_states.insert(var.to_string(), VariableState::Moved);
+        for scope in self.variable_states.iter_mut().rev() {
+            if let Some(state) = scope.get_mut(var) {
+                *state = VariableState::Moved;
+                return Ok(());
+            }
+        }
         Ok(())
     }
 
-    fn create_borrow(&mut self, owner: &str, borrower: String, borrow_type: BorrowType, duration: usize) -> Result<(), String> {
+    pub fn create_borrow(&mut self, owner: &str, borrower: String, borrow_type: BorrowType, duration: usize) -> Result<(), NeuroError> {
         match borrow_type {
             BorrowType::Shared => self.check_read(owner)?,
             BorrowType::Exclusive => self.check_write(owner)?,
