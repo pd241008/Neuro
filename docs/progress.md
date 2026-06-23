@@ -19,7 +19,7 @@
 - [x] **Source Locations**: Token-accurate line/column tracking.
 - [x] **DX Integration**: Structure errors for `miette` reporting in Rust.
 
-## Phase 4: Zero-Trust Middle-End `[IN PROGRESS]`
+## Phase 4: Zero-Trust Middle-End `[COMPLETED]`
 
 ### Sub-Phase 4.1: Symbol Table Implementation `[COMPLETED]`
 Files: `analyzer/src/symbol_table.rs`
@@ -74,31 +74,48 @@ Files: `neuro_cli/src/main.rs`, `analyzer/src/lib.rs`, `analyzer/src/error.rs`
 - [x] Audit command fully wired to read, analyze, and write verified output
 - [x] All error paths updated from `String` to `NeuroError` across entire analyzer crate
 
-### Sub-Phase 4.6: Verified AST Serialization
+## Phase 5: The Back-End (`backend`) `[IN PROGRESS]`
+
+### Sub-Phase 5.1: Proto Extension & AST Enrichment
 Status: `[NOT STARTED]`
-Files: `analyzer/src/lib.rs`
-- [ ] Annotate AST with type/safety metadata
-- [ ] Serialize verified AST to protobuf for C++ backend
-- [ ] Document output format
+Files: `shared_ast/ast.proto`, `analyzer/src/lib.rs`, `analyzer/src/semantic_analysis.rs`
+- [ ] Extend `ast.proto` with annotation fields (e.g. `optional Type resolved_type` on `Expression`)
+- [ ] Collect resolved type info during semantic analysis and return it from `analyze_ast()`
+- [ ] Build enriched `VerifiedProgram` in `audit_ast()` with type/safety metadata attached
+- [ ] Write enriched AST to disk as the verified output for the C++ backend
+- [ ] Document the enriched AST wire format
 
-## Phase 5: The Back-End (`backend`)
-
-### Sub-Phase 5.1: AST Ingestion & CLI Wiring
+### Sub-Phase 5.2: C++ Backend Ingestion & CLI Wiring
 Status: `[NOT STARTED]`
-Files: `backend/main.cpp`
-- [ ] Parse verified Protobuf AST from CLI arguments
-- [ ] Instantiate LLVMEmitter and call `emitIR(ast)`
-- [ ] Output LLVM IR to file and invoke Clang for linking
+Files: `backend/main.cpp`, `neuro_cli/src/main.rs`
+- [ ] Parse enriched Protobuf AST from CLI arguments in C++ (`backend/main.cpp`)
+- [ ] Wire `neuro_cli` to invoke the C++ backend binary with the enriched AST path
+- [ ] Instantiate `LLVMEmitter` and call `emitIR(ast)` entry point
+- [ ] Handle backend errors and propagate them to the user via `miette`
 
-### Sub-Phase 5.2: LLVM IR Lowering
+### Sub-Phase 5.3: LLVM IR Lowering — Data & Arithmetic
 Status: `[NOT STARTED]`
 Files: `backend/LLVMEmitter.cpp`
-- [ ] Map Neuro DSL constructs to LLVM IR:
-  - [ ] Functions (`FN`) --> LLVM function declarations
-  - [ ] Variables (`LET`) --> alloca + store
-  - [ ] Assignments --> load + store
-  - [ ] Binary ops (ADD, SUB, MUL, DIV) --> arithmetic instructions
-  - [ ] If/While --> cmp + branch
-  - [ ] Function calls --> call instruction
-  - [ ] Return --> ret instruction
-  - [ ] Printf/Scanf --> external libc calls
+- [ ] Map `Function` declarations to LLVM function definitions
+- [ ] Map `LET` declarations to `alloca` + `store` instructions
+- [ ] Map assignment statements to `load` + `store` instructions
+- [ ] Map integer/float literals to LLVM constants
+- [ ] Map binary arithmetic (ADD, SUB, MUL, DIV) to LLVM arithmetic instructions
+- [ ] Map comparison operators (EQ, NEQ, LT, GT, LTE, GTE) to LLVM `icmp`/`fcmp`
+
+### Sub-Phase 5.4: LLVM IR Lowering — Control Flow & I/O
+Status: `[NOT STARTED]`
+Files: `backend/LLVMEmitter.cpp`
+- [ ] Map `IfStmt` to LLVM `cmp` + `br` + phi merging
+- [ ] Map `WhileStmt` to LLVM loop headers + `br` back-edge
+- [ ] Map `FunctionCall` to LLVM `call` instruction (including externals)
+- [ ] Map `Return` to LLVM `ret` instruction with optional value
+- [ ] Map `Printf`/`Scanf` to external `libc` calls via LLVM declaration
+
+### Sub-Phase 5.5: Linking & Final Binary
+Status: `[NOT STARTED]`
+Files: `neuro_cli/src/main.rs`, `CMakeLists.txt`
+- [ ] Invoke `clang` on generated `.ll` to produce object file
+- [ ] Link with runtime library (`runtime/`) for I/O primitives
+- [ ] Output final executable binary to `target/neuro_output/output.bin`
+- [ ] Clean up intermediate files (`.ll`, `.o`) on success

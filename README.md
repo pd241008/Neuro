@@ -115,7 +115,7 @@ cargo build --release
 - [x] **The Parser**: Hand-written recursive descent parser outputting Protobuf AST.
 - [x] **DX Integration**: Structure errors for `miette` reporting in Rust.
 
-### Phase 4: Zero-Trust Middle-End `[IN PROGRESS 🚧]`
+### Phase 4: Zero-Trust Middle-End `[COMPLETED ✅]`
 
 #### Sub-Phase 4.1: Symbol Table Implementation `[COMPLETED ✅]`
 - [x] Scope stack management (`push_scope` / `pop_scope`) for block-level scoping.
@@ -134,10 +134,42 @@ cargo build --release
 - [x] Strict type mismatch detection (no implicit coercion — e.g., `float` → `int`).
 - [x] Function return type validation against declared return type.
 
-### Phase 5: The Back-End (`backend`)
-- [ ] **AST Ingestion**: Secure transfer to codegen.
-- [ ] **Target Translation**: Emission of secure C/LLVM code.
-- [ ] **Automated Linking**: Final binary generation.
+#### Sub-Phase 4.4: Security Auditor — Borrow Checker Integration `[COMPLETED ✅]`
+- [x] Variable move semantics (read/write after move detected).
+- [x] Scope-aware variable state tracking.
+- [x] 10 integration tests.
+
+#### Sub-Phase 4.5: Analyzer Pipeline & Error Reporting `[COMPLETED ✅]`
+- [x] Structured `NeuroError` diagnostics with `miette`.
+- [x] Verified AST written to disk (not discarded).
+- [x] Pipeline phases wired (frontend → analyze → backend → link).
+
+### Phase 5: The Back-End (`backend`) `[IN PROGRESS 🚧]`
+
+#### Sub-Phase 5.1: Proto Extension & AST Enrichment `[NOT STARTED]`
+- [ ] Extend `ast.proto` with resolved type annotations.
+- [ ] Collect and attach type metadata during semantic analysis.
+- [ ] Write enriched AST for C++ backend consumption.
+
+#### Sub-Phase 5.2: C++ Backend Ingestion & CLI Wiring `[NOT STARTED]`
+- [ ] Parse enriched Protobuf AST in `backend/main.cpp`.
+- [ ] Wire `LLVMEmitter` entry point.
+- [ ] Invoke backend from Rust CLI pipeline.
+
+#### Sub-Phase 5.3: LLVM IR Lowering — Data & Arithmetic `[NOT STARTED]`
+- [ ] Functions → LLVM function declarations.
+- [ ] Variables → `alloca` + `store`, assignments → `load` + `store`.
+- [ ] Binary arithmetic → LLVM arithmetic instructions.
+- [ ] Comparisons → LLVM `icmp` / `fcmp`.
+
+#### Sub-Phase 5.4: LLVM IR Lowering — Control Flow & I/O `[NOT STARTED]`
+- [ ] `IfStmt` / `WhileStmt` → `cmp` + `br`.
+- [ ] Function calls → `call` instruction.
+- [ ] `Printf`/`Scanf` → external `libc` calls.
+
+#### Sub-Phase 5.5: Linking & Final Binary `[NOT STARTED]`
+- [ ] Invoke `clang` on `.ll` to produce executable.
+- [ ] Link with runtime library for I/O primitives.
 
 ---
 
