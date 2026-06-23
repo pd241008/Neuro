@@ -4,7 +4,10 @@ use shared_ast::r#type::Kind;
 use shared_ast::expression::ExprKind;
 use shared_ast::statement::StmtKind;
 
-fn build_program(name: &str, functions: Vec<Function>) -> Program {
+fn build_program(name: &str, mut functions: Vec<Function>) -> Program {
+    functions.push(make_fn("foo", vec![make_param("arg", Kind::Int as i32)], Kind::Void as i32, vec![]));
+    functions.push(make_fn("bar", vec![make_param("arg", Kind::Bool as i32)], Kind::Void as i32, vec![]));
+    
     Program {
         name: name.to_string(),
         functions,
@@ -144,7 +147,7 @@ fn move_variable_twice_rejected() {
         make_fn("main", vec![], Kind::Void as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(42))),
             make_call("foo", vec![make_var("x")]),
-            make_call("bar", vec![make_var("x")]),
+            make_call("foo", vec![make_var("x")]),
         ]),
     ]);
     assert!(analyze_ast(&prog).is_err());
