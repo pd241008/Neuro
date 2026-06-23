@@ -89,12 +89,10 @@ public class Parser
         }
         Match(TokenType.RParen);
 
-        if (CurrentToken?.Type == TokenType.Minus) {
-            Match(TokenType.Minus);
-            Match(TokenType.GreaterThan);
-            var typeToken = MatchType();
-            function.ReturnType = new Type { Kind = ParseType(typeToken.Value) };
-        }
+        Match(TokenType.Minus);
+        Match(TokenType.GreaterThan);
+        var typeToken = MatchType();
+        function.ReturnType = new Type { Kind = ParseType(typeToken.Value) };
 
         function.Body.AddRange(ParseBlock());
         return function;
@@ -417,6 +415,7 @@ public class Parser
             "float" => Type.Types.Kind.Float,
             "bool" => Type.Types.Kind.Bool,
             "string" => Type.Types.Kind.String,
+            "void" => Type.Types.Kind.Void,
             _ => Type.Types.Kind.Custom
         };
     }
@@ -445,7 +444,8 @@ public class Parser
         Token? actual = CurrentToken;
         if (actual != null && (actual.Type == TokenType.Id
             || actual.Type == TokenType.Int || actual.Type == TokenType.Float
-            || actual.Type == TokenType.Bool || actual.Type == TokenType.String))
+            || actual.Type == TokenType.Bool || actual.Type == TokenType.String
+            || actual.Type == TokenType.Void))
         {
             _index++;
             return actual;

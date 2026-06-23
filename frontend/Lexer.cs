@@ -6,7 +6,7 @@ namespace Neuro.Frontend
     public enum TokenType
     {
         Fn, Mut, Let,
-        Int, Float, Bool, String,
+        Int, Float, Bool, String, Void,
         If, Else, While, Return,
         True, False,
         Num, FloatNum, StrLiteral,
@@ -44,7 +44,7 @@ namespace Neuro.Frontend
 
         private readonly Dictionary<string, TokenType> _keywords = new() {
             { "int", TokenType.Int }, { "float", TokenType.Float },
-            { "bool", TokenType.Bool }, { "string", TokenType.String },
+            { "bool", TokenType.Bool }, { "string", TokenType.String }, { "void", TokenType.Void },
             { "if", TokenType.If }, { "else", TokenType.Else },
             { "while", TokenType.While }, { "return", TokenType.Return },
             { "true", TokenType.True }, { "false", TokenType.False },
