@@ -21,8 +21,15 @@ pub struct Symbol {
     pub scope_level: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct FunctionSignature {
+    pub parameters: Vec<NeuroType>,
+    pub return_type: NeuroType,
+}
+
 pub struct SymbolTable {
     scopes: Vec<HashMap<String, Symbol>>,
+    functions: HashMap<String, FunctionSignature>,
     current_offset: usize,
 }
 
@@ -54,6 +61,7 @@ impl SymbolTable {
     pub fn new() -> Self {
         Self {
             scopes: vec![HashMap::new()],
+            functions: HashMap::new(),
             current_offset: 0,
         }
     }
@@ -125,5 +133,17 @@ impl SymbolTable {
         self.lookup(name)
             .map(|s| s.is_initialized)
             .ok_or_else(|| format!("Variable `{}` not found", name))
+    }
+
+    pub fn insert_function(&mut self, name: &str, sig: FunctionSignature) -> Result<(), String> {
+        if self.functions.contains_key(name) {
+            return Err(format!("Function `{}` already defined", name));
+        }
+        self.functions.insert(name.to_string(), sig);
+        Ok(())
+    }
+
+    pub fn lookup_function(&self, name: &str) -> Option<&FunctionSignature> {
+        self.functions.get(name)
     }
 }

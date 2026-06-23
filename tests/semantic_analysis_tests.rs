@@ -128,6 +128,16 @@ fn make_unary_op(op: i32, operand: Expression) -> Expression {
     }
 }
 
+fn make_function_call(name: &str, args: Vec<Expression>) -> Expression {
+    Expression {
+        location: None,
+        expr_kind: Some(expression::ExprKind::Call(FunctionCall {
+            function_name: name.to_string(),
+            arguments: args,
+        })),
+    }
+}
+
 fn make_fn(name: &str, params: Vec<Parameter>, ret_kind: i32, body: Vec<Statement>) -> Function {
     Function {
         name: name.to_string(),
@@ -375,7 +385,7 @@ fn duplicate_parameter() {
 fn assign_to_immutable_rejected() {
     let prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Void as i32, vec![
-            make_decl("x", Kind::Int as i32, None),
+            make_decl("x", Kind::Int as i32, Some(make_lit_int(0))),
             make_assign("x", make_lit_int(42)),
         ]),
     ]);
@@ -386,7 +396,7 @@ fn assign_to_immutable_rejected() {
 fn mutable_declaration_and_assign() {
     let prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Int as i32, vec![
-            make_decl_mut("x", Kind::Int as i32, None),
+            make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(0))),
             make_assign("x", make_lit_int(42)),
             make_return(Some(make_var("x"))),
         ]),
@@ -395,11 +405,10 @@ fn mutable_declaration_and_assign() {
 }
 
 #[test]
-fn uninitialized_variable_read_rejected() {
+fn uninitialized_variable_rejected() {
     let prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Int as i32, vec![
             make_decl("x", Kind::Int as i32, None),
-            make_return(Some(make_var("x"))),
         ]),
     ]);
     assert!(analyze_ast(&prog).is_err());
@@ -416,4 +425,43 @@ fn expression_statement() {
         ]),
     ]);
     assert!(analyze_ast(&prog).is_ok());
+}
+
+#[test]
+fn function_call_resolves_type() {
+    let prog = build_program("test", vec![
+        make_fn("calc", vec![], Kind::Int as i32, vec![
+            make_return(Some(make_lit_int(42))),
+        ]),
+        make_fn("main", vec![], Kind::Int as i32, vec![
+            make_return(Some(make_function_call("calc", vec![]))),
+        ]),
+    ]);
+    assert!(analyze_ast(&prog).is_ok());
+}
+
+#[test]
+fn function_call_arity_mismatch() {
+    let prog = build_program("test", vec![
+        make_fn("calc", vec![make_param("x", Kind::Int as i32)], Kind::Int as i32, vec![
+            make_return(Some(make_var("x"))),
+        ]),
+        make_fn("main", vec![], Kind::Int as i32, vec![
+            make_return(Some(make_function_call("calc", vec![]))),
+        ]),
+    ]);
+    assert!(analyze_ast(&prog).is_err());
+}
+
+#[test]
+fn function_call_type_mismatch() {
+    let prog = build_program("test", vec![
+        make_fn("calc", vec![make_param("x", Kind::Int as i32)], Kind::Int as i32, vec![
+            make_return(Some(make_var("x"))),
+        ]),
+        make_fn("main", vec![], Kind::Int as i32, vec![
+            make_return(Some(make_function_call("calc", vec![make_lit_float(1.0)]))),
+        ]),
+    ]);
+    assert!(analyze_ast(&prog).is_err());
 }

@@ -1,7 +1,7 @@
 /* Neuro Formal Grammar Specification */
 
 Program         ::= { FunctionDecl }
-FunctionDecl    ::= "fn" Id "(" [ParamList] ")" ["->" Type] Block
+FunctionDecl    ::= "fn" Id "(" [ParamList] ")" "->" Type Block
 ParamList       ::= Param { "," Param }
 Param           ::= Id ":" Type
 
@@ -29,4 +29,4 @@ PrimaryExpr     ::= Num | FloatNum | Bool | String | Id | "(" Expr ")" | FuncCal
 FuncCall        ::= Id "(" [ArgList] ")"
 ArgList         ::= Expr { "," Expr }
 
-Type            ::= "int" | "float" | "bool" | "string"
+Type            ::= "int" | "float" | "bool" | "string" | "void"
