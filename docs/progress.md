@@ -55,13 +55,15 @@ Files: `analyzer/src/semantic_analysis.rs`, `analyzer/src/lib.rs`
 - [x] Assignment marks target as initialized
 - [x] 26 integration tests in `tests/` -- all passing
 
-### Sub-Phase 4.4: Security Auditor -- Borrow Checker Integration
-Status: `[NOT STARTED]`
+### Sub-Phase 4.4: Security Auditor -- Borrow Checker Integration `[COMPLETED]`
 Files: `analyzer/src/semantic_analysis.rs`, `analyzer/src/borrow_check.rs`
-- [ ] Wire `BorrowChecker` into AST traversal
-- [ ] Check reads/writes during variable access
-- [ ] Move semantics enforcement
-- [ ] Uninitialized variable detection
+- [x] Wire `BorrowChecker` into AST traversal (AnalysisContext.borrow_checker)
+- [x] Check reads during variable access (check_read in resolve_expression)
+- [x] Check writes during variable access (check_write in visit_assignment)
+- [x] Move semantics enforcement (move_variable on function call arguments)
+- [x] Declare variable tracking (declare_variable in visit_declaration + param insertion)
+- [x] Scope-based borrow expiry (expire_borrow at scope boundaries)
+- [x] 6 integration tests in `tests/borrow_check_tests.rs` -- all passing
 
 ### Sub-Phase 4.5: Analyzer Pipeline & Error Reporting
 Status: `[NOT STARTED]`

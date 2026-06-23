@@ -6,6 +6,7 @@ use shared_ast::{
     unary_operation,
 };
 use crate::symbol_table::{SymbolTable, NeuroType};
+use crate::borrow_check::BorrowChecker;
 
 pub fn analyze_ast(program: &Program) -> Result<(), String> {
     let mut ctx = AnalysisContext::new();
@@ -14,6 +15,7 @@ pub fn analyze_ast(program: &Program) -> Result<(), String> {
 
 struct AnalysisContext {
     symbol_table: SymbolTable,
+    borrow_checker: BorrowChecker,
     current_return_type: Option<NeuroType>,
 }
 
@@ -21,6 +23,7 @@ impl AnalysisContext {
     fn new() -> Self {
         Self {
             symbol_table: SymbolTable::new(),
+            borrow_checker: BorrowChecker::new(),
             current_return_type: None,
         }
     }
@@ -34,6 +37,7 @@ impl AnalysisContext {
 
     fn visit_function(&mut self, function: &Function) -> Result<(), String> {
         self.symbol_table.push_scope();
+        self.borrow_checker.push_scope();
 
         for param in &function.parameters {
             let param_kind = param.r#type.as_ref().map_or(Kind::Custom as i32, |t| t.kind);
@@ -44,6 +48,7 @@ impl AnalysisContext {
             self.symbol_table.insert(&param.name, param_type, false);
             self.symbol_table.mark_initialized(&param.name)
                 .map_err(|e| format!("In function `{}`: {}", function.name, e))?;
+            self.borrow_checker.declare_variable(param.name.clone());
         }
 
         let declared_return = function.return_type.as_ref()
@@ -54,6 +59,8 @@ impl AnalysisContext {
             self.visit_statement(stmt)?;
         }
 
+        self.borrow_checker.pop_scope();
+        self.borrow_checker.expire_borrow();
         self.symbol_table.pop_scope()
             .map_err(|e| format!("In function `{}`: {}", function.name, e))?;
         self.current_return_type = None;
@@ -104,29 +111,35 @@ impl AnalysisContext {
             self.symbol_table.insert(&decl.name, declared_type, decl.is_mutable);
         }
 
+        self.borrow_checker.declare_variable(decl.name.clone());
+
         Ok(())
     }
 
     fn visit_assignment(&mut self, assign: &shared_ast::Assignment) -> Result<(), String> {
-        let target_type = {
+        {
             let symbol = self.symbol_table.lookup(&assign.target_name)
                 .ok_or_else(|| format!("Undefined variable `{}`", assign.target_name))?;
 
             if !symbol.is_mutable {
                 return Err(format!("Cannot assign to immutable variable `{}`", assign.target_name));
             }
+        }
 
-            symbol.type_.clone()
-        };
+        self.borrow_checker.check_write(&assign.target_name)?;
 
         if let Some(value) = &assign.value {
             let value_type = self.resolve_expression(value)?;
+            let target_type = self.symbol_table.lookup(&assign.target_name)
+                .ok_or_else(|| format!("Undefined variable `{}`", assign.target_name))?
+                .type_.clone();
             check_type_match(&target_type, &value_type,
                 &format!("Assignment to `{}`", assign.target_name))?;
         }
 
         self.symbol_table.mark_initialized(&assign.target_name)
             .map_err(|e| format!("Assignment: {}", e))?;
+        self.borrow_checker.set_valid(&assign.target_name);
 
         Ok(())
     }
@@ -140,15 +153,19 @@ impl AnalysisContext {
         }
 
         self.symbol_table.push_scope();
+        self.borrow_checker.push_scope();
         for stmt in &if_stmt.true_branch {
             self.visit_statement(stmt)?;
         }
+        self.borrow_checker.pop_scope();
         self.symbol_table.pop_scope()?;
 
         self.symbol_table.push_scope();
+        self.borrow_checker.push_scope();
         for stmt in &if_stmt.false_branch {
             self.visit_statement(stmt)?;
         }
+        self.borrow_checker.pop_scope();
         self.symbol_table.pop_scope()?;
 
         Ok(())
@@ -163,9 +180,11 @@ impl AnalysisContext {
         }
 
         self.symbol_table.push_scope();
+        self.borrow_checker.push_scope();
         for stmt in &while_stmt.body {
             self.visit_statement(stmt)?;
         }
+        self.borrow_checker.pop_scope();
         self.symbol_table.pop_scope()?;
 
         Ok(())
@@ -194,6 +213,7 @@ impl AnalysisContext {
         match &expr.expr_kind {
             Some(expression::ExprKind::Literal(lit)) => Ok(self.resolve_literal(lit)),
             Some(expression::ExprKind::Variable(var)) => {
+                self.borrow_checker.check_read(&var.name)?;
                 let symbol = self.symbol_table.lookup(&var.name)
                     .ok_or_else(|| format!("Undefined variable `{}`", var.name))?;
                 if !symbol.is_initialized {
@@ -311,8 +331,12 @@ impl AnalysisContext {
     fn resolve_function_call(&mut self, call: &shared_ast::FunctionCall) -> Result<NeuroType, String> {
         for arg in &call.arguments {
             self.resolve_expression(arg)?;
+            // Move semantics: passing a variable to a function moves it
+            if let Some(expression::ExprKind::Variable(var)) = &arg.expr_kind {
+                self.borrow_checker.move_variable(&var.name)?;
+            }
         }
-        // TODO: Resolve from function registry once added (Phase 4.4+)
+        // TODO: Resolve from function registry once added
         Ok(NeuroType::Void)
     }
 }
