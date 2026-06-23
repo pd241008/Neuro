@@ -5,7 +5,7 @@ use shared_ast::{
     binary_operation,
     unary_operation,
 };
-use crate::symbol_table::{SymbolTable, NeuroType};
+use crate::symbol_table::{SymbolTable, NeuroType, FunctionSignature};
 use crate::borrow_check::BorrowChecker;
 use crate::error::NeuroError;
 
@@ -30,6 +30,20 @@ impl AnalysisContext {
     }
 
     fn visit_program(&mut self, program: &Program) -> Result<(), NeuroError> {
+        for function in &program.functions {
+            let mut parameters = Vec::new();
+            for param in &function.parameters {
+                let param_kind = param.r#type.as_ref().map_or(Kind::Custom as i32, |t| t.kind);
+                parameters.push(NeuroType::from_proto_kind(param_kind));
+            }
+            let return_kind = function.return_type.as_ref().map_or(Kind::Void as i32, |t| t.kind);
+            let return_type = NeuroType::from_proto_kind(return_kind);
+            
+            let sig = FunctionSignature { parameters, return_type };
+            self.symbol_table.insert_function(&function.name, sig)
+                .map_err(|e| NeuroError::analysis(e))?;
+        }
+
         for function in &program.functions {
             self.visit_function(function)?;
         }
@@ -109,7 +123,7 @@ impl AnalysisContext {
             self.symbol_table.mark_initialized(&decl.name)
                 .map_err(|e| NeuroError::analysis(format!("Variable `{}`: {}", decl.name, e)))?;
         } else {
-            self.symbol_table.insert(&decl.name, declared_type, decl.is_mutable);
+            return Err(NeuroError::analysis(format!("Variable `{}` must be initialized", decl.name)));
         }
 
         self.borrow_checker.declare_variable(decl.name.clone());
@@ -330,13 +344,27 @@ impl AnalysisContext {
     }
 
     fn resolve_function_call(&mut self, call: &shared_ast::FunctionCall) -> Result<NeuroType, NeuroError> {
-        for arg in &call.arguments {
-            self.resolve_expression(arg)?;
+        let sig = self.symbol_table.lookup_function(&call.function_name)
+            .ok_or_else(|| NeuroError::analysis(format!("Undefined function `{}`", call.function_name)))?
+            .clone();
+
+        if sig.parameters.len() != call.arguments.len() {
+            return Err(NeuroError::analysis(format!(
+                "Function `{}` expects {} arguments, but got {}",
+                call.function_name, sig.parameters.len(), call.arguments.len()
+            )));
+        }
+
+        for (i, arg) in call.arguments.iter().enumerate() {
+            let arg_type = self.resolve_expression(arg)?;
+            check_type_match(&sig.parameters[i], &arg_type,
+                &format!("Argument {} of `{}`", i + 1, call.function_name))?;
+
             if let Some(expression::ExprKind::Variable(var)) = &arg.expr_kind {
                 self.borrow_checker.move_variable(&var.name)?;
             }
         }
-        Ok(NeuroType::Void)
+        Ok(sig.return_type)
     }
 }
 

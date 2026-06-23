@@ -61,7 +61,7 @@ message Statement {
 message VariableDeclaration {
     string name = 1;
     Type type = 2;
-    Expression initializer = 3; // Optional
+    Expression initializer = 3; // Required
     bool is_mutable = 4;
 }
 
