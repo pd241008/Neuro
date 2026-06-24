@@ -77,13 +77,31 @@ Files: `neuro_cli/src/main.rs`, `analyzer/src/lib.rs`, `analyzer/src/error.rs`
 ## Phase 5: The Back-End (`backend`) `[IN PROGRESS]`
 
 ### Sub-Phase 5.1: Proto Extension & AST Enrichment
-Status: `[NOT STARTED]`
+Status: `[COMPLETED]`
 Files: `shared_ast/ast.proto`, `analyzer/src/lib.rs`, `analyzer/src/semantic_analysis.rs`
-- [ ] Extend `ast.proto` with annotation fields (e.g. `optional Type resolved_type` on `Expression`)
-- [ ] Collect resolved type info during semantic analysis and return it from `analyze_ast()`
-- [ ] Build enriched `VerifiedProgram` in `audit_ast()` with type/safety metadata attached
-- [ ] Write enriched AST to disk as the verified output for the C++ backend
-- [ ] Document the enriched AST wire format
+- [x] Extend `ast.proto` with annotation fields (`Type resolved_type` on `Expression`, `VariableDeclaration`)
+- [x] Collect resolved type info during semantic analysis — `resolve_expression()` now sets `resolved_type` on each `Expression` node
+- [x] Build enriched `VerifiedProgram` in `audit_ast()` with type/safety metadata attached (wraps enriched `Program` with `borrow_check_passed` and `type_check_passed` flags)
+- [x] Write enriched AST to disk as the verified output for the C++ backend (output is now `VerifiedProgram` encoded bytes)
+- [x] Document the enriched AST wire format (see below)
+
+#### Enriched AST Wire Format
+
+After analysis, `audit_ast()` produces a serialized `VerifiedProgram` protobuf message:
+
+```protobuf
+message VerifiedProgram {
+    Program program = 1;          // The original program with resolved_type fields populated
+    bool borrow_check_passed = 2;  // Always true if analysis succeeded
+    bool type_check_passed = 3;    // Always true if analysis succeeded
+}
+```
+
+Within `program`, every `Expression` node has its `resolved_type` field set to the computed type (e.g. `INT`, `FLOAT`, `BOOL`, `STRING`, `VOID`). Every `VariableDeclaration` has its `resolved_type` set to the declared type. This allows the C++ backend to determine the LLVM type of any expression without performing its own type analysis.
+
+Key fields added to existing messages:
+- `Expression.resolved_type` (field 7, `Type`) — populated during semantic analysis
+- `VariableDeclaration.resolved_type` (field 5, `Type`) — populated during semantic analysis
 
 ### Sub-Phase 5.2: C++ Backend Ingestion & CLI Wiring
 Status: `[NOT STARTED]`

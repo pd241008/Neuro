@@ -28,6 +28,7 @@ fn make_param(name: &str, kind: i32) -> Parameter {
 fn make_lit_int(val: i64) -> Expression {
     Expression {
         location: None,
+        resolved_type: None,
         expr_kind: Some(ExprKind::Literal(Literal {
             value: Some(literal::Value::IntVal(val)),
         })),
@@ -37,6 +38,7 @@ fn make_lit_int(val: i64) -> Expression {
 fn make_lit_bool(val: bool) -> Expression {
     Expression {
         location: None,
+        resolved_type: None,
         expr_kind: Some(ExprKind::Literal(Literal {
             value: Some(literal::Value::BoolVal(val)),
         })),
@@ -46,6 +48,7 @@ fn make_lit_bool(val: bool) -> Expression {
 fn make_var(name: &str) -> Expression {
     Expression {
         location: None,
+        resolved_type: None,
         expr_kind: Some(ExprKind::Variable(VariableReference {
             name: name.to_string(),
         })),
@@ -60,6 +63,7 @@ fn make_decl_mut(name: &str, kind: i32, init: Option<Expression>) -> Statement {
             r#type: make_type(kind),
             initializer: init,
             is_mutable: true,
+            resolved_type: None,
         })),
     }
 }
@@ -86,6 +90,7 @@ fn make_call(fn_name: &str, args: Vec<Expression>) -> Statement {
         location: None,
         stmt_kind: Some(StmtKind::ExpressionStmt(Expression {
             location: None,
+            resolved_type: None,
             expr_kind: Some(ExprKind::Call(FunctionCall {
                 function_name: fn_name.to_string(),
                 arguments: args,
@@ -96,7 +101,7 @@ fn make_call(fn_name: &str, args: Vec<Expression>) -> Statement {
 
 #[test]
 fn read_after_declaration_is_ok() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Void as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(42))),
             Statement {
@@ -105,12 +110,12 @@ fn read_after_declaration_is_ok() {
             },
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_ok());
+    assert!(analyze_ast(&mut prog).is_ok());
 }
 
 #[test]
 fn move_variable_then_read_rejected() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Void as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(42))),
             make_call("foo", vec![make_var("x")]),
@@ -120,12 +125,12 @@ fn move_variable_then_read_rejected() {
             },
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_err());
+    assert!(analyze_ast(&mut prog).is_err());
 }
 
 #[test]
 fn move_then_reassign_is_ok() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Void as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(42))),
             make_call("foo", vec![make_var("x")]),
@@ -138,35 +143,35 @@ fn move_then_reassign_is_ok() {
             },
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_ok());
+    assert!(analyze_ast(&mut prog).is_ok());
 }
 
 #[test]
 fn move_variable_twice_rejected() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Void as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(42))),
             make_call("foo", vec![make_var("x")]),
             make_call("foo", vec![make_var("x")]),
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_err());
+    assert!(analyze_ast(&mut prog).is_err());
 }
 
 #[test]
 fn move_literal_arg_is_ok() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Void as i32, vec![
             make_call("foo", vec![make_lit_int(42)]),
             make_call("bar", vec![make_lit_bool(true)]),
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_ok());
+    assert!(analyze_ast(&mut prog).is_ok());
 }
 
 #[test]
 fn reassigned_variable_becomes_readable_again() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Int as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(42))),
             make_call("foo", vec![make_var("x")]),
@@ -180,12 +185,12 @@ fn reassigned_variable_becomes_readable_again() {
             make_return(Some(make_var("x"))),
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_ok());
+    assert!(analyze_ast(&mut prog).is_ok());
 }
 
 #[test]
 fn scope_shadowing_does_not_affect_outer_variable() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Int as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(10))),
             Statement {
@@ -202,24 +207,24 @@ fn scope_shadowing_does_not_affect_outer_variable() {
             make_return(Some(make_var("x"))),
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_ok());
+    assert!(analyze_ast(&mut prog).is_ok());
 }
 
 #[test]
 fn unmoved_variable_still_readable() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Int as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(10))),
             make_call("foo", vec![make_lit_int(1)]),
             make_return(Some(make_var("x"))),
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_ok());
+    assert!(analyze_ast(&mut prog).is_ok());
 }
 
 #[test]
 fn move_in_inner_scope_affects_outer_scope_read() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Int as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(10))),
             Statement {
@@ -235,12 +240,12 @@ fn move_in_inner_scope_affects_outer_scope_read() {
             make_return(Some(make_var("x"))),
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_err());
+    assert!(analyze_ast(&mut prog).is_err());
 }
 
 #[test]
 fn move_in_inner_scope_then_reassign_in_inner_scope_restores_outer() {
-    let prog = build_program("test", vec![
+    let mut prog = build_program("test", vec![
         make_fn("main", vec![], Kind::Int as i32, vec![
             make_decl_mut("x", Kind::Int as i32, Some(make_lit_int(10))),
             Statement {
@@ -263,5 +268,5 @@ fn move_in_inner_scope_then_reassign_in_inner_scope_restores_outer() {
             make_return(Some(make_var("x"))),
         ]),
     ]);
-    assert!(analyze_ast(&prog).is_ok());
+    assert!(analyze_ast(&mut prog).is_ok());
 }

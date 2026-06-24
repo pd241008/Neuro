@@ -1,5 +1,5 @@
 use shared_ast::{
-    Program, Function, Statement, Expression, VariableDeclaration,
+    Program, Function, Statement, Expression, VariableDeclaration, Type,
     statement, expression, literal,
     r#type::Kind,
     binary_operation,
@@ -9,7 +9,7 @@ use crate::symbol_table::{SymbolTable, NeuroType, FunctionSignature};
 use crate::borrow_check::BorrowChecker;
 use crate::error::NeuroError;
 
-pub fn analyze_ast(program: &Program) -> Result<(), NeuroError> {
+pub fn analyze_ast(program: &mut Program) -> Result<(), NeuroError> {
     let mut ctx = AnalysisContext::new();
     ctx.visit_program(program)
 }
@@ -18,6 +18,18 @@ struct AnalysisContext {
     symbol_table: SymbolTable,
     borrow_checker: BorrowChecker,
     current_return_type: Option<NeuroType>,
+}
+
+impl NeuroType {
+    fn to_type(&self) -> Type {
+        Type {
+            kind: self.to_proto_kind(),
+            custom_name: match self {
+                NeuroType::Custom(name) => name.clone(),
+                _ => String::new(),
+            },
+        }
+    }
 }
 
 impl AnalysisContext {
@@ -29,7 +41,11 @@ impl AnalysisContext {
         }
     }
 
-    fn visit_program(&mut self, program: &Program) -> Result<(), NeuroError> {
+    fn set_expr_type(&self, expr: &mut Expression, ty: &NeuroType) {
+        expr.resolved_type = Some(ty.to_type());
+    }
+
+    fn visit_program(&mut self, program: &mut Program) -> Result<(), NeuroError> {
         for function in &program.functions {
             let mut parameters = Vec::new();
             for param in &function.parameters {
@@ -44,13 +60,13 @@ impl AnalysisContext {
                 .map_err(|e| NeuroError::analysis(e))?;
         }
 
-        for function in &program.functions {
+        for function in &mut program.functions {
             self.visit_function(function)?;
         }
         Ok(())
     }
 
-    fn visit_function(&mut self, function: &Function) -> Result<(), NeuroError> {
+    fn visit_function(&mut self, function: &mut Function) -> Result<(), NeuroError> {
         self.symbol_table.push_scope();
         self.borrow_checker.push_scope();
 
@@ -70,7 +86,7 @@ impl AnalysisContext {
             .map(|t| NeuroType::from_proto_kind(t.kind));
         self.current_return_type = declared_return;
 
-        for stmt in &function.body {
+        for stmt in &mut function.body {
             self.visit_statement(stmt)?;
         }
 
@@ -82,8 +98,8 @@ impl AnalysisContext {
         Ok(())
     }
 
-    fn visit_statement(&mut self, stmt: &Statement) -> Result<(), NeuroError> {
-        match &stmt.stmt_kind {
+    fn visit_statement(&mut self, stmt: &mut Statement) -> Result<(), NeuroError> {
+        match &mut stmt.stmt_kind {
             Some(statement::StmtKind::Declaration(decl)) => {
                 self.visit_declaration(decl)
             }
@@ -107,7 +123,7 @@ impl AnalysisContext {
         }
     }
 
-    fn visit_declaration(&mut self, decl: &VariableDeclaration) -> Result<(), NeuroError> {
+    fn visit_declaration(&mut self, decl: &mut VariableDeclaration) -> Result<(), NeuroError> {
         let declared_kind = decl.r#type.as_ref().map_or(Kind::Custom as i32, |t| t.kind);
         let declared_type = NeuroType::from_proto_kind(declared_kind);
 
@@ -115,13 +131,14 @@ impl AnalysisContext {
             return Err(NeuroError::analysis(format!("Duplicate variable `{}` in the same scope", decl.name)));
         }
 
-        if let Some(initializer) = &decl.initializer {
+        if let Some(initializer) = &mut decl.initializer {
             let init_type = self.resolve_expression(initializer)?;
             check_type_match(&declared_type, &init_type,
                 &format!("Variable `{}`", decl.name))?;
-            self.symbol_table.insert(&decl.name, declared_type, decl.is_mutable);
+            self.symbol_table.insert(&decl.name, declared_type.clone(), decl.is_mutable);
             self.symbol_table.mark_initialized(&decl.name)
                 .map_err(|e| NeuroError::analysis(format!("Variable `{}`: {}", decl.name, e)))?;
+            decl.resolved_type = Some(declared_type.to_type());
         } else {
             return Err(NeuroError::analysis(format!("Variable `{}` must be initialized", decl.name)));
         }
@@ -131,7 +148,7 @@ impl AnalysisContext {
         Ok(())
     }
 
-    fn visit_assignment(&mut self, assign: &shared_ast::Assignment) -> Result<(), NeuroError> {
+    fn visit_assignment(&mut self, assign: &mut shared_ast::Assignment) -> Result<(), NeuroError> {
         {
             let symbol = self.symbol_table.lookup(&assign.target_name)
                 .ok_or_else(|| NeuroError::analysis(format!("Undefined variable `{}`", assign.target_name)))?;
@@ -143,7 +160,7 @@ impl AnalysisContext {
 
         self.borrow_checker.check_write(&assign.target_name)?;
 
-        if let Some(value) = &assign.value {
+        if let Some(value) = &mut assign.value {
             let value_type = self.resolve_expression(value)?;
             let target_type = self.symbol_table.lookup(&assign.target_name)
                 .ok_or_else(|| NeuroError::analysis(format!("Undefined variable `{}`", assign.target_name)))?
@@ -159,8 +176,8 @@ impl AnalysisContext {
         Ok(())
     }
 
-    fn visit_if(&mut self, if_stmt: &shared_ast::IfStatement) -> Result<(), NeuroError> {
-        if let Some(condition) = &if_stmt.condition {
+    fn visit_if(&mut self, if_stmt: &mut shared_ast::IfStatement) -> Result<(), NeuroError> {
+        if let Some(condition) = &mut if_stmt.condition {
             let cond_type = self.resolve_expression(condition)?;
             if cond_type != NeuroType::Bool {
                 return Err(NeuroError::analysis("If condition must be a boolean expression"));
@@ -169,7 +186,7 @@ impl AnalysisContext {
 
         self.symbol_table.push_scope();
         self.borrow_checker.push_scope();
-        for stmt in &if_stmt.true_branch {
+        for stmt in &mut if_stmt.true_branch {
             self.visit_statement(stmt)?;
         }
         self.borrow_checker.pop_scope();
@@ -177,7 +194,7 @@ impl AnalysisContext {
 
         self.symbol_table.push_scope();
         self.borrow_checker.push_scope();
-        for stmt in &if_stmt.false_branch {
+        for stmt in &mut if_stmt.false_branch {
             self.visit_statement(stmt)?;
         }
         self.borrow_checker.pop_scope();
@@ -186,8 +203,8 @@ impl AnalysisContext {
         Ok(())
     }
 
-    fn visit_while(&mut self, while_stmt: &shared_ast::WhileStatement) -> Result<(), NeuroError> {
-        if let Some(condition) = &while_stmt.condition {
+    fn visit_while(&mut self, while_stmt: &mut shared_ast::WhileStatement) -> Result<(), NeuroError> {
+        if let Some(condition) = &mut while_stmt.condition {
             let cond_type = self.resolve_expression(condition)?;
             if cond_type != NeuroType::Bool {
                 return Err(NeuroError::analysis("While condition must be a boolean expression"));
@@ -196,7 +213,7 @@ impl AnalysisContext {
 
         self.symbol_table.push_scope();
         self.borrow_checker.push_scope();
-        for stmt in &while_stmt.body {
+        for stmt in &mut while_stmt.body {
             self.visit_statement(stmt)?;
         }
         self.borrow_checker.pop_scope();
@@ -205,9 +222,9 @@ impl AnalysisContext {
         Ok(())
     }
 
-    fn visit_return(&mut self, ret: &shared_ast::ReturnStatement) -> Result<(), NeuroError> {
+    fn visit_return(&mut self, ret: &mut shared_ast::ReturnStatement) -> Result<(), NeuroError> {
         let expected = self.current_return_type.clone();
-        match (&ret.value, expected) {
+        match (&mut ret.value, expected) {
             (None, Some(expected)) if expected != NeuroType::Void => {
                 Err(NeuroError::analysis(format!("Function expects return type `{:?}`, but no value was returned", expected)))
             }
@@ -224,8 +241,8 @@ impl AnalysisContext {
         }
     }
 
-    fn resolve_expression(&mut self, expr: &Expression) -> Result<NeuroType, NeuroError> {
-        match &expr.expr_kind {
+    fn resolve_expression(&mut self, expr: &mut Expression) -> Result<NeuroType, NeuroError> {
+        let resolved = match &mut expr.expr_kind {
             Some(expression::ExprKind::Literal(lit)) => Ok(self.resolve_literal(lit)),
             Some(expression::ExprKind::Variable(var)) => {
                 self.borrow_checker.check_read(&var.name)?;
@@ -246,7 +263,9 @@ impl AnalysisContext {
                 self.resolve_function_call(call)
             }
             None => Err(NeuroError::analysis("Empty expression")),
-        }
+        }?;
+        self.set_expr_type(expr, &resolved);
+        Ok(resolved)
     }
 
     fn resolve_literal(&self, lit: &shared_ast::Literal) -> NeuroType {
@@ -259,10 +278,10 @@ impl AnalysisContext {
         }
     }
 
-    fn resolve_binary_op(&mut self, bin_op: &shared_ast::BinaryOperation) -> Result<NeuroType, NeuroError> {
-        let left = bin_op.left.as_deref()
+    fn resolve_binary_op(&mut self, bin_op: &mut shared_ast::BinaryOperation) -> Result<NeuroType, NeuroError> {
+        let left = bin_op.left.as_deref_mut()
             .ok_or_else(|| NeuroError::analysis("Binary operation missing left operand"))?;
-        let right = bin_op.right.as_deref()
+        let right = bin_op.right.as_deref_mut()
             .ok_or_else(|| NeuroError::analysis("Binary operation missing right operand"))?;
 
         let left_type = self.resolve_expression(left)?;
@@ -315,8 +334,8 @@ impl AnalysisContext {
         }
     }
 
-    fn resolve_unary_op(&mut self, un_op: &shared_ast::UnaryOperation) -> Result<NeuroType, NeuroError> {
-        let operand = un_op.operand.as_deref()
+    fn resolve_unary_op(&mut self, un_op: &mut shared_ast::UnaryOperation) -> Result<NeuroType, NeuroError> {
+        let operand = un_op.operand.as_deref_mut()
             .ok_or_else(|| NeuroError::analysis("Unary operation missing operand"))?;
         let operand_type = self.resolve_expression(operand)?;
 
@@ -343,7 +362,7 @@ impl AnalysisContext {
         }
     }
 
-    fn resolve_function_call(&mut self, call: &shared_ast::FunctionCall) -> Result<NeuroType, NeuroError> {
+    fn resolve_function_call(&mut self, call: &mut shared_ast::FunctionCall) -> Result<NeuroType, NeuroError> {
         let sig = self.symbol_table.lookup_function(&call.function_name)
             .ok_or_else(|| NeuroError::analysis(format!("Undefined function `{}`", call.function_name)))?
             .clone();
@@ -355,7 +374,7 @@ impl AnalysisContext {
             )));
         }
 
-        for (i, arg) in call.arguments.iter().enumerate() {
+        for (i, arg) in call.arguments.iter_mut().enumerate() {
             let arg_type = self.resolve_expression(arg)?;
             check_type_match(&sig.parameters[i], &arg_type,
                 &format!("Argument {} of `{}`", i + 1, call.function_name))?;

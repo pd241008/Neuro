@@ -17,6 +17,13 @@ message Program {
     repeated Function functions = 2;
 }
 
+// --- Verified Program (enriched by the analyzer) ---
+message VerifiedProgram {
+    Program program = 1;
+    bool borrow_check_passed = 2;
+    bool type_check_passed = 3;
+}
+
 // --- Functions ---
 message Function {
     string name = 1;
@@ -63,6 +70,7 @@ message VariableDeclaration {
     Type type = 2;
     Expression initializer = 3; // Required
     bool is_mutable = 4;
+    Type resolved_type = 5; // Enriched by analyzer
 }
 
 message Assignment {
@@ -95,6 +103,7 @@ message Expression {
         UnaryOperation unary_op = 5;
         FunctionCall call = 6;
     }
+    Type resolved_type = 7; // Enriched by analyzer
 }
 
 message Literal {
