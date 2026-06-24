@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 analyzer = { path = "../analyzer" }
 shared_ast = { path = "../shared_ast" }
+prost = "0.11"
 
 [[test]]
 name = "symbol_table"
@@ -19,3 +20,7 @@ path = "semantic_analysis_tests.rs"
 [[test]]
 name = "borrow_check"
 path = "borrow_check_tests.rs"
+
+[[test]]
+name = "backend_integration"
+path = "backend_integration_test.rs"

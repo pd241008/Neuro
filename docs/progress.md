@@ -104,12 +104,13 @@ Key fields added to existing messages:
 - `VariableDeclaration.resolved_type` (field 5, `Type`) — populated during semantic analysis
 
 ### Sub-Phase 5.2: C++ Backend Ingestion & CLI Wiring
-Status: `[NOT STARTED]`
-Files: `backend/main.cpp`, `neuro_cli/src/main.rs`
-- [ ] Parse enriched Protobuf AST from CLI arguments in C++ (`backend/main.cpp`)
-- [ ] Wire `neuro_cli` to invoke the C++ backend binary with the enriched AST path
-- [ ] Instantiate `LLVMEmitter` and call `emitIR(ast)` entry point
-- [ ] Handle backend errors and propagate them to the user via `miette`
+Status: `[COMPLETED]`
+Files: `backend/main.cpp`, `backend/LLVMEmitter.cpp`, `backend/NeuroBackend.h`, `backend/Makefile`, `neuro_cli/src/main.rs`
+- [x] Parse enriched `VerifiedProgram` protobuf from CLI arguments in C++ (`backend/main.cpp`) — reads binary protobuf, validates, and passes to emitter
+- [x] Wire `neuro_cli` to invoke the C++ backend binary with the enriched AST path — `run_pipeline()` already passes `<verified_ast_path> <output_ll_path>`; backend binary now exists and is used
+- [x] Instantiate `LLVMEmitter` and call `emitIR(ast)` entry point — `LLVMEmitter` walks the full AST and emits LLVM IR for all statement/expression types
+- [x] Handle backend errors and propagate them to the user via `miette` — non-zero exit codes with stderr messages are caught and reported in the CLI pipeline
+- [x] Integration test (`tests/backend_integration_test.rs`) — verifies the full Rust→C++ pipeline: construct Program, run audit_ast, invoke backend binary, verify LLVM IR output
 
 ### Sub-Phase 5.3: LLVM IR Lowering — Data & Arithmetic
 Status: `[NOT STARTED]`

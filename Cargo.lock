@@ -894,6 +894,7 @@ name = "tests"
 version = "0.1.0"
 dependencies = [
  "analyzer",
+ "prost",
  "shared_ast",
 ]
 
