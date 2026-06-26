@@ -125,7 +125,7 @@ fn test_backend_generates_llvm_ir() {
 
     let ll_content = fs::read_to_string(&output_path).expect("read output ll");
     assert!(ll_content.contains("define"), "LLVM IR should contain function definitions");
-    assert!(ll_content.contains("neuro_print"), "LLVM IR should declare runtime functions");
+    assert!(ll_content.contains("@printf"), "LLVM IR should declare libc functions");
 
     fs::remove_file(&input_path).ok();
     fs::remove_file(&output_path).ok();

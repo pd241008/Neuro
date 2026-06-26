@@ -28,8 +28,11 @@ private:
     std::string typeToLLVM(int kind);
     std::string mangleName(const std::string& name);
     std::string newRegister();
+    std::string emitGlobalString(const std::string& content, size_t& outLen);
 
     int regCounter_{0};
+    int globalStringCounter_{0};
+    std::vector<std::string> globalStrings_;
 };
 
 #endif

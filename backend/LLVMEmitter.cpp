@@ -20,6 +20,31 @@ std::string LLVMEmitter::mangleName(const std::string& name) {
     return "@_" + name;
 }
 
+std::string LLVMEmitter::emitGlobalString(const std::string& content, size_t& outLen) {
+    std::string name = "@.str." + std::to_string(globalStringCounter_++);
+    outLen = content.size() + 1;
+    std::string escaped;
+    for (char c : content) {
+        switch (c) {
+            case '\n': escaped += "\\0A"; break;
+            case '\"': escaped += "\\22"; break;
+            case '\\': escaped += "\\5C"; break;
+            default:
+                if (std::isprint(static_cast<unsigned char>(c)))
+                    escaped += c;
+                else {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\%02X", static_cast<unsigned char>(c));
+                    escaped += buf;
+                }
+        }
+    }
+    std::string global = name + " = private unnamed_addr constant ["
+        + std::to_string(outLen) + " x i8] c\"" + escaped + "\\00\"\n";
+    globalStrings_.push_back(global);
+    return name;
+}
+
 std::string LLVMEmitter::typeToLLVM(const Type& type) {
     return typeToLLVM(type.kind());
 }
@@ -48,15 +73,19 @@ bool LLVMEmitter::emitProgram(const VerifiedProgram& verified) {
     out_ << "target triple = \"x86_64-pc-linux-gnu\"\n";
     out_ << "\n";
 
-    // Declare external I/O functions used by the runtime
-    out_ << "declare void @neuro_print(i8*)\n";
-    out_ << "declare void @neuro_println(i8*)\n";
-    out_ << "declare i32 @neuro_read()\n";
+    // Declare external libc I/O functions
+    out_ << "declare i32 @printf(i8*, ...)\n";
+    out_ << "declare i32 @scanf(i8*, ...)\n";
     out_ << "\n";
 
     for (const auto& func : prog.functions()) {
         emitFunction(func);
         out_ << "\n";
+    }
+
+    // Emit collected global string constants (for printf/scanf format strings)
+    for (const auto& gs : globalStrings_) {
+        out_ << gs;
     }
 
     return true;
@@ -349,20 +378,64 @@ void LLVMEmitter::emitExpression(const Expression& expr, std::ostream& block, co
         }
         case Expression::kCall: {
             const auto& call = expr.call();
-            std::string mangled = mangleName(call.function_name());
+            std::string funcName = call.function_name();
 
-            // Build argument list
-            block << "  " << resultReg << " = call " << typeToLLVM(expr.resolved_type()) << " " << mangled << "(";
+            // Emit argument expressions as separate instructions first
+            std::vector<std::string> argRegs;
+            std::vector<std::string> argTypes;
             for (int i = 0; i < call.arguments_size(); ++i) {
-                if (i > 0) block << ", ";
                 std::string argReg = newRegister();
                 emitExpression(call.arguments(i), block, argReg);
-                // Need type for each argument - use the resolved type
-                if (call.arguments(i).has_resolved_type()) {
-                    block << typeToLLVM(call.arguments(i).resolved_type()) << " " << argReg;
-                } else {
-                    block << "i32 " << argReg;
+                argRegs.push_back(argReg);
+                std::string llvmType = call.arguments(i).has_resolved_type()
+                    ? typeToLLVM(call.arguments(i).resolved_type()) : "i32";
+                argTypes.push_back(llvmType);
+            }
+
+            // Built-in I/O functions mapped to libc printf/scanf
+            if (funcName == "print" || funcName == "println") {
+                bool withNewline = (funcName == "println");
+                std::string fmt;
+                if (argTypes.size() == 1) {
+                    if (argTypes[0] == "i8*") fmt = "%s";
+                    else if (argTypes[0] == "i32") fmt = "%d";
+                    else if (argTypes[0] == "double") fmt = "%f";
+                    else if (argTypes[0] == "i1") fmt = "%d";
+                    else fmt = "%p";
                 }
+                if (withNewline) fmt += "\n";
+                size_t fmtLen = 0;
+                std::string globalStr = emitGlobalString(fmt, fmtLen);
+                block << "  " << resultReg << " = call i32 (i8*, ...) @printf(i8* getelementptr inbounds (["
+                      << fmtLen << " x i8], [" << fmtLen << " x i8]* " << globalStr << ", i64 0, i64 0)";
+                for (size_t i = 0; i < argRegs.size(); ++i) {
+                    block << ", " << argTypes[i] << " " << argRegs[i];
+                }
+                block << ")\n";
+                break;
+            }
+
+            if (funcName == "read") {
+                std::string llvmType = expr.has_resolved_type() ? typeToLLVM(expr.resolved_type()) : "i32";
+                std::string slotReg = newRegister();
+                block << "  " << slotReg << " = alloca " << llvmType << "\n";
+                std::string fmt = (llvmType == "double") ? "%lf" : "%d";
+                size_t fmtLen = 0;
+                std::string globalStr = emitGlobalString(fmt, fmtLen);
+                block << "  call i32 (i8*, ...) @scanf(i8* getelementptr inbounds (["
+                      << fmtLen << " x i8], [" << fmtLen << " x i8]* " << globalStr << ", i64 0, i64 0), ptr "
+                      << slotReg << ")\n";
+                block << "  " << resultReg << " = load " << llvmType << ", ptr " << slotReg << "\n";
+                break;
+            }
+
+            // Regular user function call
+            std::string mangled = mangleName(funcName);
+            std::string retType = expr.has_resolved_type() ? typeToLLVM(expr.resolved_type()) : "void";
+            block << "  " << resultReg << " = call " << retType << " " << mangled << "(";
+            for (size_t i = 0; i < argRegs.size(); ++i) {
+                if (i > 0) block << ", ";
+                block << argTypes[i] << " " << argRegs[i];
             }
             block << ")\n";
             break;
