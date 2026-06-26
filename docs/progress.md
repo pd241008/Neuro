@@ -123,13 +123,15 @@ Files: `backend/LLVMEmitter.cpp`
 - [ ] Map comparison operators (EQ, NEQ, LT, GT, LTE, GTE) to LLVM `icmp`/`fcmp`
 
 ### Sub-Phase 5.4: LLVM IR Lowering — Control Flow & I/O
-Status: `[NOT STARTED]`
-Files: `backend/LLVMEmitter.cpp`
-- [ ] Map `IfStmt` to LLVM `cmp` + `br` + phi merging
-- [ ] Map `WhileStmt` to LLVM loop headers + `br` back-edge
-- [ ] Map `FunctionCall` to LLVM `call` instruction (including externals)
-- [ ] Map `Return` to LLVM `ret` instruction with optional value
-- [ ] Map `Printf`/`Scanf` to external `libc` calls via LLVM declaration
+Status: `[COMPLETED]`
+Files: `backend/LLVMEmitter.cpp`, `analyzer/src/semantic_analysis.rs`
+- [x] Map `IfStmt` to LLVM `cmp` + `br` (true/false/merge labels)
+- [x] Map `WhileStmt` to LLVM loop headers + `br` back-edge
+- [x] Map `FunctionCall` to LLVM `call` instruction (fixed: args emitted before call, not interleaved)
+- [x] Map `Return` to LLVM `ret` instruction with optional value
+- [x] Map `print`/`println`/`read` to external libc `printf`/`scanf` calls via LLVM declaration
+- [x] Pre-register built-in I/O function signatures in analyzer symbol table
+- [x] 1 integration test (`tests/print_read_test.rs`) — all passing
 
 ### Sub-Phase 5.5: Linking & Final Binary
 Status: `[NOT STARTED]`

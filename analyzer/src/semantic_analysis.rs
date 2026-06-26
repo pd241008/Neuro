@@ -46,6 +46,20 @@ impl AnalysisContext {
     }
 
     fn visit_program(&mut self, program: &mut Program) -> Result<(), NeuroError> {
+        // Register built-in I/O functions
+        self.symbol_table.insert_function("print", FunctionSignature {
+            parameters: vec![NeuroType::String],
+            return_type: NeuroType::Void,
+        }).ok();
+        self.symbol_table.insert_function("println", FunctionSignature {
+            parameters: vec![NeuroType::String],
+            return_type: NeuroType::Void,
+        }).ok();
+        self.symbol_table.insert_function("read", FunctionSignature {
+            parameters: vec![],
+            return_type: NeuroType::Int,
+        }).ok();
+
         for function in &program.functions {
             let mut parameters = Vec::new();
             for param in &function.parameters {

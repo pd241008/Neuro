@@ -24,3 +24,7 @@ path = "borrow_check_tests.rs"
 [[test]]
 name = "backend_integration"
 path = "backend_integration_test.rs"
+
+[[test]]
+name = "print_read"
+path = "print_read_test.rs"
