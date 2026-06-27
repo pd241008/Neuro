@@ -377,22 +377,34 @@ impl AnalysisContext {
     }
 
     fn resolve_function_call(&mut self, call: &mut shared_ast::FunctionCall) -> Result<NeuroType, NeuroError> {
+        let is_builtin_io = matches!(call.function_name.as_str(), "print" | "println" | "read");
+
         let sig = self.symbol_table.lookup_function(&call.function_name)
             .ok_or_else(|| NeuroError::analysis(format!("Undefined function `{}`", call.function_name)))?
             .clone();
 
-        if sig.parameters.len() != call.arguments.len() {
-            return Err(NeuroError::analysis(format!(
-                "Function `{}` expects {} arguments, but got {}",
-                call.function_name, sig.parameters.len(), call.arguments.len()
-            )));
+        // Built-in I/O functions accept any argument types (vararg-like)
+        if !is_builtin_io {
+            if sig.parameters.len() != call.arguments.len() {
+                return Err(NeuroError::analysis(format!(
+                    "Function `{}` expects {} arguments, but got {}",
+                    call.function_name, sig.parameters.len(), call.arguments.len()
+                )));
+            }
+
+            for (i, arg) in call.arguments.iter_mut().enumerate() {
+                let arg_type = self.resolve_expression(arg)?;
+                check_type_match(&sig.parameters[i], &arg_type,
+                    &format!("Argument {} of `{}`", i + 1, call.function_name))?;
+            }
+        } else {
+            for arg in call.arguments.iter_mut() {
+                self.resolve_expression(arg)?;
+            }
         }
 
-        for (i, arg) in call.arguments.iter_mut().enumerate() {
-            let arg_type = self.resolve_expression(arg)?;
-            check_type_match(&sig.parameters[i], &arg_type,
-                &format!("Argument {} of `{}`", i + 1, call.function_name))?;
-
+        // Apply move semantics for variable arguments
+        for arg in &call.arguments {
             if let Some(expression::ExprKind::Variable(var)) = &arg.expr_kind {
                 self.borrow_checker.move_variable(&var.name)?;
             }

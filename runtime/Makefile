@@ -1,9 +1,9 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
 
-all: runtime.a
+all: libneuro_runtime.a
 
-runtime.a: io.o memory.o
+libneuro_runtime.a: io.o memory.o
 	ar rcs libneuro_runtime.a io.o memory.o
 
 io.o: io.c
