@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    name: Build & Release (Linux x64)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup CMake & LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang llvm-dev libclang-dev protobuf-compiler libprotobuf-dev
+
+      - name: Build C# Frontend
+        run: |
+          dotnet publish frontend/frontend.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o staging/bin
+          # Rename for the CLI to find it easily
+          mv staging/bin/frontend staging/bin/neuro-frontend
+
+      - name: Build C++ Backend
+        run: |
+          cmake -B backend/build -S backend -DCMAKE_BUILD_TYPE=Release
+          cmake --build backend/build --config Release
+          cp backend/build/neuro_backend staging/bin/neuro-backend
+
+      - name: Build Rust CLI & Analyzer
+        run: |
+          cargo build --release --manifest-path neuro_cli/Cargo.toml
+          cp target/release/neuro_cli staging/bin/neuro
+
+      - name: Bundle Runtime Library Sources
+        run: |
+          mkdir -p staging/lib
+          cp runtime/io.c staging/lib/
+          cp runtime/memory.c staging/lib/
+
+      - name: Create Release Archive
+        run: |
+          cd staging
+          tar -czvf ../neuro-linux-x64.tar.gz bin lib
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: neuro-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
