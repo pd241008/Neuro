@@ -17,6 +17,7 @@ std::string LLVMEmitter::newRegister() {
 }
 
 std::string LLVMEmitter::mangleName(const std::string& name) {
+    if (name == "main") return "@main";
     return "@_" + name;
 }
 
@@ -250,12 +251,14 @@ void LLVMEmitter::emitExpression(const Expression& expr, std::ostream& block, co
                 case Literal::kBoolVal:
                     block << "  " << resultReg << " = add i1 0, " << (lit.bool_val() ? "1" : "0") << "\n";
                     break;
-                case Literal::kStringVal:
+                case Literal::kStringVal: {
+                    size_t strLen = 0;
+                    std::string globalName = emitGlobalString(lit.string_val(), strLen);
                     block << "  " << resultReg << " = getelementptr inbounds (["
-                          << lit.string_val().size() + 1 << " x i8], ["
-                          << lit.string_val().size() + 1 << " x i8]* @__str_" << resultReg.substr(1)
+                          << strLen << " x i8], [" << strLen << " x i8]* " << globalName
                           << ", i64 0, i64 0)\n";
                     break;
+                }
                 default:
                     block << "  " << resultReg << " = add i32 0, 0\n";
                     break;

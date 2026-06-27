@@ -74,7 +74,7 @@ Files: `neuro_cli/src/main.rs`, `analyzer/src/lib.rs`, `analyzer/src/error.rs`
 - [x] Audit command fully wired to read, analyze, and write verified output
 - [x] All error paths updated from `String` to `NeuroError` across entire analyzer crate
 
-## Phase 5: The Back-End (`backend`) `[IN PROGRESS]`
+## Phase 5: The Back-End (`backend`) `[COMPLETED]`
 
 ### Sub-Phase 5.1: Proto Extension & AST Enrichment
 Status: `[COMPLETED]`
@@ -113,14 +113,14 @@ Files: `backend/main.cpp`, `backend/LLVMEmitter.cpp`, `backend/NeuroBackend.h`, 
 - [x] Integration test (`tests/backend_integration_test.rs`) — verifies the full Rust→C++ pipeline: construct Program, run audit_ast, invoke backend binary, verify LLVM IR output
 
 ### Sub-Phase 5.3: LLVM IR Lowering — Data & Arithmetic
-Status: `[NOT STARTED]`
+Status: `[COMPLETED]`
 Files: `backend/LLVMEmitter.cpp`
-- [ ] Map `Function` declarations to LLVM function definitions
-- [ ] Map `LET` declarations to `alloca` + `store` instructions
-- [ ] Map assignment statements to `load` + `store` instructions
-- [ ] Map integer/float literals to LLVM constants
-- [ ] Map binary arithmetic (ADD, SUB, MUL, DIV) to LLVM arithmetic instructions
-- [ ] Map comparison operators (EQ, NEQ, LT, GT, LTE, GTE) to LLVM `icmp`/`fcmp`
+- [x] Map `Function` declarations to LLVM function definitions
+- [x] Map `LET` declarations to `alloca` + `store` instructions
+- [x] Map assignment statements to `load` + `store` instructions
+- [x] Map integer/float literals to LLVM constants
+- [x] Map binary arithmetic (ADD, SUB, MUL, DIV) to LLVM arithmetic instructions
+- [x] Map comparison operators (EQ, NEQ, LT, GT, LTE, GTE) to LLVM `icmp`/`fcmp`
 
 ### Sub-Phase 5.4: LLVM IR Lowering — Control Flow & I/O
 Status: `[COMPLETED]`
@@ -134,9 +134,9 @@ Files: `backend/LLVMEmitter.cpp`, `analyzer/src/semantic_analysis.rs`
 - [x] 1 integration test (`tests/print_read_test.rs`) — all passing
 
 ### Sub-Phase 5.5: Linking & Final Binary
-Status: `[NOT STARTED]`
-Files: `neuro_cli/src/main.rs`, `CMakeLists.txt`
-- [ ] Invoke `clang` on generated `.ll` to produce object file
-- [ ] Link with runtime library (`runtime/`) for I/O primitives
-- [ ] Output final executable binary to `target/neuro_output/output.bin`
-- [ ] Clean up intermediate files (`.ll`, `.o`) on success
+Status: `[COMPLETED]`
+Files: `neuro_cli/src/main.rs`, `runtime/`
+- [x] Build runtime library (`libneuro_runtime.a`) from `io.c` and `memory.c`
+- [x] Compile `.ll` → `.o` object file via `clang -c`
+- [x] Link object + runtime library → final executable at `target/neuro_output/output.bin`
+- [x] Clean up intermediate files (`.ll`, `.o`) on success

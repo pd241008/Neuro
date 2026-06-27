@@ -64,6 +64,43 @@ fn find_dotnet() -> String {
     "dotnet".to_string()
 }
 
+fn build_runtime(output_dir: &PathBuf) -> Result<PathBuf, miette::Report> {
+    let runtime_dir = PathBuf::from("runtime");
+    let runtime_a = output_dir.join("libneuro_runtime.a");
+
+    let io_o = output_dir.join("runtime_io.o");
+    let mem_o = output_dir.join("runtime_memory.o");
+
+    let cc = if which::which("clang").is_ok() { "clang" } else { "gcc" };
+
+    let compile = |src: &str, dst: &PathBuf| -> Result<(), miette::Report> {
+        let out = Command::new(cc)
+            .args(["-c", src, "-o", &dst.to_string_lossy()])
+            .current_dir(&runtime_dir)
+            .output()
+            .map_err(|e| miette::miette!("Failed to compile runtime/{}: {}", src, e))?;
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr);
+            return Err(miette::miette!("Runtime compilation error ({}):\n{}", src, err.trim()));
+        }
+        Ok(())
+    };
+
+    compile("io.c", &io_o)?;
+    compile("memory.c", &mem_o)?;
+
+    let ar_out = Command::new("ar")
+        .args(["rcs", &runtime_a.to_string_lossy(), &io_o.to_string_lossy(), &mem_o.to_string_lossy()])
+        .output()
+        .map_err(|e| miette::miette!("Failed to create runtime archive: {}", e))?;
+    if !ar_out.status.success() {
+        let err = String::from_utf8_lossy(&ar_out.stderr);
+        return Err(miette::miette!("Archive error:\n{}", err.trim()));
+    }
+
+    Ok(runtime_a)
+}
+
 fn run_gui() -> Result<()> {
     println!("{}", "\nLAUNCHING NEURO REPL...".cyan().bold());
 
@@ -183,22 +220,46 @@ fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
     pb.inc(1);
 
     // Phase 4: Linking
-    pb.set_message("Finalizing: System Linking [Clang]");
+    pb.set_message("Finalizing: System Linking [Clang + Runtime]");
 
     let bin_path = output_dir.join("output.bin");
+    let obj_path = output_dir.join("output.o");
     let clang_found = which::which("clang").is_ok();
 
     if clang_found && backend_bin.exists() {
-        let link_output = Command::new("clang")
-            .arg("-o")
-            .arg(&bin_path)
-            .arg(&ll_path)
+        // Step 1: Build runtime library
+        let runtime_a = build_runtime(&output_dir)?;
+
+        // Step 2: Compile LLVM IR → object file
+        let compile_output = Command::new("clang")
+            .args(["-c", &ll_path.to_string_lossy(), "-o", &obj_path.to_string_lossy()])
             .output()
-            .map_err(|e| miette::miette!("Failed to invoke Clang: {}", e))?;
+            .map_err(|e| miette::miette!("Failed to compile LLVM IR to object file: {}", e))?;
+
+        if !compile_output.status.success() {
+            let err = String::from_utf8_lossy(&compile_output.stderr);
+            return Err(miette::miette!("Compilation Error:\n{}", err.trim()));
+        }
+
+        // Step 3: Link object + runtime → final binary
+        let link_output = Command::new("clang")
+            .args(["-o", &bin_path.to_string_lossy(), &obj_path.to_string_lossy(), &runtime_a.to_string_lossy()])
+            .output()
+            .map_err(|e| miette::miette!("Failed to invoke Clang for linking: {}", e))?;
 
         if !link_output.status.success() {
             let err = String::from_utf8_lossy(&link_output.stderr);
             return Err(miette::miette!("Linking Error:\n{}", err.trim()));
+        }
+
+        // Step 4: Clean up intermediate files on success
+        let _ = std::fs::remove_file(&ll_path);
+        let _ = std::fs::remove_file(&obj_path);
+        let _ = std::fs::remove_file(&output_dir.join("runtime_io.o"));
+        let _ = std::fs::remove_file(&output_dir.join("runtime_memory.o"));
+
+        if verbose {
+            println!("{} Linked with runtime library", ">".bright_black());
         }
     } else {
         if verbose {
@@ -216,9 +277,10 @@ fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
     println!("\n{}", "BUILD COMPLETE".green().bold());
     if verbose {
         println!("{} Verified AST: {}", ">".bright_black(), verified_path.display());
-        println!("{} LLVM IR: {}", ">".bright_black(), ll_path.display());
-        if clang_found && bin_path.exists() {
+        if clang_found && backend_bin.exists() {
             println!("{} Binary: {}", ">".bright_black(), bin_path.display());
+        } else {
+            println!("{} LLVM IR: {}", ">".bright_black(), ll_path.display());
         }
     }
 

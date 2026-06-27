@@ -8,6 +8,7 @@ publish = false
 analyzer = { path = "../analyzer" }
 shared_ast = { path = "../shared_ast" }
 prost = "0.11"
+which = "4"
 
 [[test]]
 name = "symbol_table"
@@ -28,3 +29,11 @@ path = "backend_integration_test.rs"
 [[test]]
 name = "print_read"
 path = "print_read_test.rs"
+
+[[test]]
+name = "backend_lowering"
+path = "backend_lowering_tests.rs"
+
+[[test]]
+name = "linking"
+path = "linking_test.rs"

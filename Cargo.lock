@@ -896,6 +896,7 @@ dependencies = [
  "analyzer",
  "prost",
  "shared_ast",
+ "which",
 ]
 
 [[package]]
