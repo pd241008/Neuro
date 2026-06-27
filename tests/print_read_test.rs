@@ -8,16 +8,6 @@ fn make_type(kind: i32) -> Option<shared_ast::Type> {
     Some(shared_ast::Type { kind, custom_name: String::new() })
 }
 
-fn make_lit_int(val: i64) -> shared_ast::Expression {
-    shared_ast::Expression {
-        location: None,
-        resolved_type: None,
-        expr_kind: Some(shared_ast::expression::ExprKind::Literal(shared_ast::Literal {
-            value: Some(shared_ast::literal::Value::IntVal(val)),
-        })),
-    }
-}
-
 fn make_lit_string(s: &str) -> shared_ast::Expression {
     shared_ast::Expression {
         location: None,
