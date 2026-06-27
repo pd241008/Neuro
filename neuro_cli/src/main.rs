@@ -61,11 +61,46 @@ fn find_dotnet() -> String {
     if let Ok(path) = which::which("dotnet") {
         return path.to_string_lossy().to_string();
     }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let local_dotnet = std::path::PathBuf::from(home).join(".dotnet/dotnet");
+    if local_dotnet.exists() {
+        return local_dotnet.to_string_lossy().to_string();
+    }
     "dotnet".to_string()
 }
 
+fn get_frontend_cmd() -> (String, Vec<String>, Option<PathBuf>) {
+    let exe_dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+    let standalone = exe_dir.join("neuro-frontend");
+    if standalone.exists() {
+        (standalone.to_string_lossy().to_string(), vec![], None)
+    } else {
+        (find_dotnet(), vec!["run".to_string(), "--".to_string()], Some(PathBuf::from("frontend")))
+    }
+}
+
+fn get_backend_cmd() -> PathBuf {
+    let exe_dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+    let standalone = exe_dir.join("neuro-backend");
+    if standalone.exists() {
+        standalone
+    } else {
+        PathBuf::from("backend/build/neuro_backend")
+    }
+}
+
+fn get_runtime_dir() -> PathBuf {
+    let exe_dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+    let standalone_lib = exe_dir.join("../lib");
+    if standalone_lib.exists() {
+        standalone_lib
+    } else {
+        PathBuf::from("runtime")
+    }
+}
+
 fn build_runtime(output_dir: &PathBuf) -> Result<PathBuf, miette::Report> {
-    let runtime_dir = PathBuf::from("runtime");
+    let runtime_dir = get_runtime_dir();
     let runtime_a = output_dir.join("libneuro_runtime.a");
 
     let io_o = output_dir.join("runtime_io.o");
@@ -74,9 +109,9 @@ fn build_runtime(output_dir: &PathBuf) -> Result<PathBuf, miette::Report> {
     let cc = if which::which("clang").is_ok() { "clang" } else { "gcc" };
 
     let compile = |src: &str, dst: &PathBuf| -> Result<(), miette::Report> {
+        let src_path = runtime_dir.join(src);
         let out = Command::new(cc)
-            .args(["-c", src, "-o", &dst.to_string_lossy()])
-            .current_dir(&runtime_dir)
+            .args(["-c", &src_path.to_string_lossy(), "-o", &dst.to_string_lossy()])
             .output()
             .map_err(|e| miette::miette!("Failed to compile runtime/{}: {}", src, e))?;
         if !out.status.success() {
@@ -104,14 +139,18 @@ fn build_runtime(output_dir: &PathBuf) -> Result<PathBuf, miette::Report> {
 fn run_gui() -> Result<()> {
     println!("{}", "\nLAUNCHING NEURO REPL...".cyan().bold());
 
-    let dotnet_cmd = find_dotnet();
-    let current_dir = "frontend";
+    let (cmd, args, current_dir) = get_frontend_cmd();
 
     println!("{} Starting REPL...", ">".bright_black());
-    let mut child = Command::new(&dotnet_cmd)
-        .arg("run")
-        .current_dir(current_dir)
-        .spawn()
+    let mut cmd_builder = Command::new(&cmd);
+    for arg in args {
+        cmd_builder.arg(arg);
+    }
+    if let Some(dir) = current_dir {
+        cmd_builder.current_dir(dir);
+    }
+
+    let mut child = cmd_builder.spawn()
         .map_err(|e| miette::miette!("Failed to launch C# frontend: {}", e))?;
 
     child.wait().map_err(|e| miette::miette!("REPL exited with error: {}", e))?;
@@ -144,12 +183,25 @@ fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
         .to_string_lossy()
         .to_string();
 
-    let frontend_output = Command::new(find_dotnet())
-        .arg("run")
-        .arg("--")
-        .arg(&file_path_str)
-        .current_dir("frontend")
-        .output()
+    let (frontend_cmd_str, frontend_args, frontend_cwd) = get_frontend_cmd();
+    let mut frontend_cmd = Command::new(&frontend_cmd_str);
+    for arg in frontend_args {
+        frontend_cmd.arg(arg);
+    }
+    frontend_cmd.arg(&file_path_str);
+    
+    // AST path logic: If standalone, AST goes to current dir (or output_dir). 
+    // In local dev, it goes to frontend/.
+    let ast_path = if let Some(dir) = frontend_cwd {
+        frontend_cmd.current_dir(&dir);
+        dir.join("output.ast")
+    } else {
+        // If standalone, we run it in the output dir so `output.ast` lands there
+        frontend_cmd.current_dir(&output_dir);
+        output_dir.join("output.ast")
+    };
+
+    let frontend_output = frontend_cmd.output()
         .map_err(|e| miette::miette!("Failed to invoke C# frontend: {}", e))?;
 
     if !frontend_output.status.success() {
@@ -164,7 +216,6 @@ fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
     // Phase 2: Security Audit (Rust)
     pb.set_message("Middle-End: Zero-Trust Security Audit [Rust]");
 
-    let ast_path = PathBuf::from("frontend/output.ast");
     if !ast_path.exists() {
         pb.finish_with_message("AST output not found");
         return Err(miette::miette!("Frontend did not produce output.ast"));
@@ -189,7 +240,7 @@ fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
     // Phase 3: Backend Generation (C++)
     pb.set_message("Back-End: LLVM IR Generation [C++]");
 
-    let backend_bin = PathBuf::from("backend/build/neuro_backend");
+    let backend_bin = get_backend_cmd();
     let ll_path = output_dir.join("output.ll");
 
     if backend_bin.exists() {
