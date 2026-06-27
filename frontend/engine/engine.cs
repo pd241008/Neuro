@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Google.Protobuf;
 
 namespace Neuro.Frontend {
-    public class Program {
+    public class EngineProgram {
         public static void Main(string[] args) {
             if (args.Length > 0) {
                 string filePath = args[0];

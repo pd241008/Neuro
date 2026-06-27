@@ -1,8 +1,10 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "frontend", "frontend\frontend.csproj", "{90CF18BE-437A-4804-9E85-213B3EBFA1C5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "frontend.Tests", "frontend.Tests\frontend.Tests.csproj", "{433E9C70-43DE-44A7-9DE9-9BA4CCFD7114}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -14,6 +16,10 @@ Global
 		{90CF18BE-437A-4804-9E85-213B3EBFA1C5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{90CF18BE-437A-4804-9E85-213B3EBFA1C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{90CF18BE-437A-4804-9E85-213B3EBFA1C5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{433E9C70-43DE-44A7-9DE9-9BA4CCFD7114}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{433E9C70-43DE-44A7-9DE9-9BA4CCFD7114}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{433E9C70-43DE-44A7-9DE9-9BA4CCFD7114}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{433E9C70-43DE-44A7-9DE9-9BA4CCFD7114}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

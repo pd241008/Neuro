@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Neuro.AST;
 using Type = Neuro.AST.Type;
+using Program = Neuro.AST.Program;
 
 namespace Neuro.Frontend {
 
