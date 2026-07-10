@@ -4,5 +4,6 @@ members = [
     "analyzer",
     "shared_ast",
     "tests",
+    "detector",
 ]
 resolver = "2"

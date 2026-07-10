@@ -37,3 +37,7 @@ path = "backend_lowering_tests.rs"
 [[test]]
 name = "linking"
 path = "linking_test.rs"
+
+[[test]]
+name = "boundary"
+path = "boundary_tests.rs"
