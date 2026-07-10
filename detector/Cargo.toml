@@ -1,0 +1,16 @@
+[package]
+name = "neuro-detector"
+version = "0.1.0"
+edition = "2021"
+description = "Detects unauthenticated provenance boundary vulnerabilities in Neuro compiler pipeline"
+
+[[bin]]
+name = "neuro-detector"
+path = "src/main.rs"
+
+[dependencies]
+regex = "1"
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
