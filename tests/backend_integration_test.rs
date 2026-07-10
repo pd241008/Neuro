@@ -100,6 +100,9 @@ fn test_backend_generates_llvm_ir() {
         ],
     };
 
+    let key = "integration-test-hmac-key";
+    std::env::set_var("NEURO_SIGNING_KEY", key);
+
     let encoded = prog.encode_to_vec();
     let verified = audit_ast(&encoded).expect("audit_ast should succeed");
 
@@ -115,6 +118,7 @@ fn test_backend_generates_llvm_ir() {
     let output = Command::new(&backend_bin)
         .arg(input_path.to_str().unwrap())
         .arg(output_path.to_str().unwrap())
+        .env("NEURO_SIGNING_KEY", key)
         .output()
         .expect("failed to invoke backend");
 

@@ -4,15 +4,20 @@
 //! Stage 1 (Baseline):      Confirm fail-closed rejection works as expected.
 //! Stage 2 (Bypass):        Reproduce the unauthenticated provenance boundary finding.
 //! Stage 3 (Field Drift):   Test behavior with unset/malformed protobuf fields.
+//! Stage 4 (Fix 2 - HMAC):  Verify that HMAC signing prevents the bypass.
 
 use analyzer::audit_ast;
+use hmac::{Hmac, Mac};
 use shared_ast::expression::ExprKind;
 use shared_ast::statement::StmtKind;
 use shared_ast::*;
 use prost::Message;
+use sha2::Sha256;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+
+const TEST_SIGNING_KEY: &str = "boundary-test-hmac-key-2026";
 
 // ─── Helpers (adapted from borrow_check_tests.rs and backend_integration_test.rs) ──
 
@@ -95,6 +100,31 @@ fn make_return(val: Option<Expression>) -> Statement {
         location: None,
         stmt_kind: Some(StmtKind::ReturnStmt(ReturnStatement { value: val })),
     }
+}
+
+/// Sign a VerifiedProgram using the same HMAC-SHA256 scheme as the analyzer.
+/// Returns the serialized bytes with the signature field filled in.
+fn sign_verified_program(verified: &VerifiedProgram, key: &str) -> Vec<u8> {
+    let program = verified.program.as_ref().expect("VerifiedProgram must have a program");
+    let borrow_check_passed = verified.borrow_check_passed;
+    let type_check_passed = verified.type_check_passed;
+
+    // Match the deterministic per-field encoding used by analyzer/src/lib.rs::compute_hmac
+    let mut data = Vec::new();
+    let program_bytes = program.encode_to_vec();
+    data.extend_from_slice(&(program_bytes.len() as u64).to_le_bytes());
+    data.extend_from_slice(&program_bytes);
+    data.push(borrow_check_passed as u8);
+    data.push(type_check_passed as u8);
+
+    type H = Hmac<Sha256>;
+    let mut mac = H::new_from_slice(key.as_bytes()).expect("HMAC accepts any key length");
+    mac.update(&data);
+    let tag = mac.finalize().into_bytes().to_vec();
+
+    let mut signed = verified.clone();
+    signed.signature = tag;
+    signed.encode_to_vec()
 }
 
 fn make_call(fn_name: &str, args: Vec<Expression>) -> Statement {
@@ -201,6 +231,43 @@ fn run_backend(verified_bytes: &[u8], test_label: &str) -> (i32, String, String,
     (exit_code, stdout, stderr, ir)
 }
 
+/// Like run_backend, but explicitly sets NEURO_SIGNING_KEY for the backend process.
+fn run_backend_with_key(verified_bytes: &[u8], test_label: &str, key: &str) -> (i32, String, String, Option<String>) {
+    let input_path = std::env::temp_dir().join(format!("boundary_{}.verified.ast", test_label));
+    let output_path = std::env::temp_dir().join(format!("boundary_{}.output.ll", test_label));
+
+    fs::write(&input_path, verified_bytes).expect("write verified ast to temp file");
+
+    let backend_bin = project_root().join("backend/build/neuro_backend");
+    assert!(
+        backend_bin.exists(),
+        "Backend binary not found at {:?}",
+        backend_bin
+    );
+
+    let output = Command::new(&backend_bin)
+        .arg(input_path.to_str().unwrap())
+        .arg(output_path.to_str().unwrap())
+        .env("NEURO_SIGNING_KEY", key)
+        .output()
+        .expect("failed to invoke backend");
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    let ir = if output_path.exists() {
+        fs::read_to_string(&output_path).ok()
+    } else {
+        None
+    };
+
+    fs::remove_file(&input_path).ok();
+    fs::remove_file(&output_path).ok();
+
+    (exit_code, stdout, stderr, ir)
+}
+
 /// Write a human-readable artifact log for the paper's evaluation section.
 fn write_artifact(
     test_name: &str,
@@ -239,9 +306,12 @@ fn write_artifact(
 fn stage_1a_valid_program_survives_full_pipeline() {
     let program = valid_program();
     let encoded = program.encode_to_vec();
+
+    std::env::set_var("NEURO_SIGNING_KEY", TEST_SIGNING_KEY);
     let verified_bytes = audit_ast(&encoded).expect("audit_ast should succeed for a valid program");
 
-    let (exit_code, _stdout, stderr, ir) = run_backend(&verified_bytes, "stage1a_valid");
+    let (exit_code, _stdout, stderr, ir) = run_backend_with_key(&verified_bytes, "stage1a_valid", TEST_SIGNING_KEY);
+
     write_artifact(
         "stage1a_valid",
         &verified_bytes,
@@ -272,6 +342,7 @@ fn stage_1b_use_after_move_rejected_by_analyzer() {
     let program = use_after_move_program();
     let encoded = program.encode_to_vec();
 
+    std::env::set_var("NEURO_SIGNING_KEY", TEST_SIGNING_KEY);
     let result = audit_ast(&encoded);
     assert!(
         result.is_err(),
@@ -288,10 +359,13 @@ fn stage_1b_use_after_move_rejected_by_analyzer() {
 
 // ─── Stage 2: Bypass / Exploit Reproduction ──────────────────────────
 
-/// Core finding: construct a VerifiedProgram by hand (skipping audit_ast
-/// entirely) containing a use-after-move program, with both safety flags
-/// set to true. The backend should emit LLVM IR for this program,
-/// demonstrating that the provenance boundary is unauthenticated.
+/// Before Fix 2: construct a VerifiedProgram by hand (skipping audit_ast
+/// entirely) with flags=true, and the backend would emit LLVM IR — the
+/// core vulnerability.
+///
+/// After Fix 2: the same hand-crafted payload is now REJECTED because it
+/// carries no valid HMAC signature. This test documents that the bypass
+/// is now blocked.
 #[test]
 fn stage_2_bypass_use_after_move_flags_true() {
     let program = use_after_move_program();
@@ -300,10 +374,11 @@ fn stage_2_bypass_use_after_move_flags_true() {
         program: Some(program),
         borrow_check_passed: true,
         type_check_passed: true,
+        signature: vec![],
     };
     let verified_bytes = verified.encode_to_vec();
 
-    let (exit_code, _stdout, stderr, ir) = run_backend(&verified_bytes, "stage2_flags_true");
+    let (exit_code, _stdout, stderr, ir) = run_backend_with_key(&verified_bytes, "stage2_flags_true", TEST_SIGNING_KEY);
     write_artifact(
         "stage2_flags_true",
         &verified_bytes,
@@ -313,35 +388,34 @@ fn stage_2_bypass_use_after_move_flags_true() {
         ir.as_deref(),
     );
 
-    eprintln!("=== Stage 2: Bypass with flags=true ===");
+    eprintln!("=== Stage 2: Bypass with flags=true (post-fix) ===");
     eprintln!("  Constructed a VerifiedProgram by hand (skipping audit_ast entirely)");
     eprintln!("  containing a use-after-move program with borrow_check_passed=true, type_check_passed=true.");
+    eprintln!("  This payload carries NO valid HMAC signature.");
 
-    assert_eq!(
+    assert_ne!(
         exit_code,
         0,
-        "Backend SHOULD have exited successfully (this is the vulnerability). \
-         If it rejected the input, some unknown check exists.\n\
+        "Backend SHOULD have REJECTED the unsigned payload (Fix 2 blocks the bypass).\n\
+         If it exited 0, the HMAC check is not working.\n\
          stderr: {}",
         stderr
     );
 
-    let ir_content = ir.expect("output .ll file should have been produced");
     assert!(
-        ir_content.contains("define"),
-        "Emitted IR should contain function definitions.\n\
-         If missing, the backend silently failed.\nIR:\n{}",
-        ir_content
+        ir.is_none() || !ir.as_ref().map_or(false, |s| s.contains("define")),
+        "Backend should NOT have emitted LLVM IR for the unsigned program.\n\
+         stderr: {}",
+        stderr
     );
 
-    eprintln!("  RESULT: Backend emitted valid LLVM IR for a use-after-move program");
-    eprintln!("  without going through the analyzer, and with borrow_check_passed=true.");
-    eprintln!("  The safety property (no use-after-move) was NOT enforced at the boundary.\n");
+    eprintln!("  RESULT: Backend correctly REJECTED the unsigned VerifiedProgram.");
+    eprintln!("  The bypass that was the core finding is now blocked by HMAC signing.\n");
 }
 
-/// Second variant: same malformed program, but now both safety flags are
-/// false. The backend should STILL emit LLVM IR, proving that the flags
-/// are read by nothing — not just that true values are trusted.
+/// Before Fix 2: flags=false still produced IR — proving flags are unused.
+/// After Fix 2: same rejection as flags=true, because the real check is
+/// the HMAC signature, not the flags.
 #[test]
 fn stage_2_bypass_use_after_move_flags_false() {
     let program = use_after_move_program();
@@ -350,10 +424,11 @@ fn stage_2_bypass_use_after_move_flags_false() {
         program: Some(program),
         borrow_check_passed: false,
         type_check_passed: false,
+        signature: vec![],
     };
     let verified_bytes = verified.encode_to_vec();
 
-    let (exit_code, _stdout, stderr, ir) = run_backend(&verified_bytes, "stage2_flags_false");
+    let (exit_code, _stdout, stderr, ir) = run_backend_with_key(&verified_bytes, "stage2_flags_false", TEST_SIGNING_KEY);
     write_artifact(
         "stage2_flags_false",
         &verified_bytes,
@@ -363,27 +438,19 @@ fn stage_2_bypass_use_after_move_flags_false() {
         ir.as_deref(),
     );
 
-    eprintln!("=== Stage 2: Bypass with flags=false ===");
+    eprintln!("=== Stage 2: Bypass with flags=false (post-fix) ===");
     eprintln!("  Same use-after-move program, but now borrow_check_passed=false AND type_check_passed=false.");
 
-    assert_eq!(
+    assert_ne!(
         exit_code,
         0,
-        "Backend SHOULD have exited successfully (proving flags are not checked). \
-         If it rejected the input, some unknown check exists.\n\
+        "Backend SHOULD have REJECTED the unsigned payload.\n\
          stderr: {}",
         stderr
     );
 
-    let ir_content = ir.expect("output .ll file should have been produced");
-    assert!(
-        ir_content.contains("define"),
-        "Emitted IR should contain function definitions.\nIR:\n{}",
-        ir_content
-    );
-
-    eprintln!("  RESULT: Backend emitted valid LLVM IR even with borrow_check_passed=false.");
-    eprintln!("  This proves the flags are read by NOTHING — not just that true values are trusted.\n");
+    eprintln!("  RESULT: Backend correctly REJECTED the unsigned VerifiedProgram.");
+    eprintln!("  The HMAC signature check is the gate — not the boolean flags.\n");
 }
 
 // ─── Stage 3: Field Drift on resolved_type and unset oneofs ──────────
@@ -413,10 +480,11 @@ fn stage_3a_unset_resolved_type_defaults_to_i32() {
         program: Some(program),
         borrow_check_passed: true,
         type_check_passed: true,
+        signature: vec![],
     };
-    let verified_bytes = verified.encode_to_vec();
+    let verified_bytes = sign_verified_program(&verified, TEST_SIGNING_KEY);
 
-    let (exit_code, _stdout, stderr, ir) = run_backend(&verified_bytes, "stage3a_unset_type");
+    let (exit_code, _stdout, stderr, ir) = run_backend_with_key(&verified_bytes, "stage3a_unset_type", TEST_SIGNING_KEY);
     write_artifact(
         "stage3a_unset_type",
         &verified_bytes,
@@ -472,10 +540,11 @@ fn stage_3b_unset_stmt_kind_silently_skipped() {
         program: Some(program),
         borrow_check_passed: true,
         type_check_passed: true,
+        signature: vec![],
     };
-    let verified_bytes = verified.encode_to_vec();
+    let verified_bytes = sign_verified_program(&verified, TEST_SIGNING_KEY);
 
-    let (exit_code, _stdout, stderr, ir) = run_backend(&verified_bytes, "stage3b_unset_stmt");
+    let (exit_code, _stdout, stderr, ir) = run_backend_with_key(&verified_bytes, "stage3b_unset_stmt", TEST_SIGNING_KEY);
     write_artifact(
         "stage3b_unset_stmt",
         &verified_bytes,
@@ -535,10 +604,11 @@ fn stage_3b_unset_expr_kind_emits_default() {
         program: Some(program),
         borrow_check_passed: true,
         type_check_passed: true,
+        signature: vec![],
     };
-    let verified_bytes = verified.encode_to_vec();
+    let verified_bytes = sign_verified_program(&verified, TEST_SIGNING_KEY);
 
-    let (exit_code, _stdout, stderr, ir) = run_backend(&verified_bytes, "stage3b_unset_expr");
+    let (exit_code, _stdout, stderr, ir) = run_backend_with_key(&verified_bytes, "stage3b_unset_expr", TEST_SIGNING_KEY);
     write_artifact(
         "stage3b_unset_expr",
         &verified_bytes,
@@ -565,4 +635,241 @@ fn stage_3b_unset_expr_kind_emits_default() {
     eprintln!("=== Stage 3b: Unset expr_kind ===");
     eprintln!("  An Expression with no expr_kind was handled by the default case.");
     eprintln!("  Backend emitted `add i32 0, 0` as a fallback — silent corruption, not rejection.\n");
+}
+
+// ─── Stage 4: Fix 2 — HMAC Signature Verification ────────────────────
+
+/// Test 4a: The exact Stage 2 bypass exploit (hand-crafted VerifiedProgram,
+/// no valid signature) should now be REJECTED by the patched backend.
+/// This is the paper's "and here's the fix working" evidence.
+#[test]
+fn stage_4a_bypass_without_signature_rejected() {
+    let program = use_after_move_program();
+
+    // Construct VerifiedProgram by hand WITHOUT a signature (mimics the exploit)
+    let verified = VerifiedProgram {
+        program: Some(program),
+        borrow_check_passed: true,
+        type_check_passed: true,
+        signature: vec![], // Empty signature — should be rejected
+    };
+    let verified_bytes = verified.encode_to_vec();
+
+    let (exit_code, _stdout, stderr, ir) = run_backend(&verified_bytes, "stage4a_no_signature");
+
+    eprintln!("=== Stage 4a: Bypass without signature ===");
+    eprintln!("  Constructed the same hand-crafted VerifiedProgram as Stage 2,");
+    eprintln!("  but now the backend requires an HMAC signature.");
+
+    assert_ne!(
+        exit_code,
+        0,
+        "Backend SHOULD have REJECTED the unsigned VerifiedProgram.\n\
+         If it exited 0, the HMAC check is not working.\n\
+         stderr: {}",
+        stderr
+    );
+
+    assert!(
+        ir.is_none() || !ir.as_ref().map_or(false, |s| s.contains("define")),
+        "Backend should NOT have emitted LLVM IR for the unsigned program.\n\
+         If IR was produced, the HMAC check is bypassed.\n\
+         stderr: {}",
+        stderr
+    );
+
+    assert!(
+        stderr.contains("signature") || stderr.contains("NEURO_SIGNING_KEY"),
+        "Error message should mention signature or signing key.\n\
+         stderr: {}",
+        stderr
+    );
+
+    eprintln!("  RESULT: Backend correctly REJECTED the unsigned VerifiedProgram.");
+    eprintln!("  The HMAC signature check prevented the Stage 2 bypass.\n");
+}
+
+/// Test 4b: A VerifiedProgram with an INVALID signature should also be rejected.
+/// This tests that the HMAC comparison is actually performed, not just a length check.
+#[test]
+fn stage_4b_bypass_with_invalid_signature_rejected() {
+    let program = use_after_move_program();
+
+    // Construct VerifiedProgram with a garbage signature (32 bytes, but wrong)
+    let verified = VerifiedProgram {
+        program: Some(program),
+        borrow_check_passed: true,
+        type_check_passed: true,
+        signature: vec![0xAB; 32], // Invalid signature
+    };
+    let verified_bytes = verified.encode_to_vec();
+
+    let (exit_code, _stdout, stderr, ir) = run_backend(&verified_bytes, "stage4b_bad_signature");
+
+    eprintln!("=== Stage 4b: Bypass with invalid signature ===");
+    eprintln!("  Constructed VerifiedProgram with a 32-byte garbage signature.");
+
+    assert_ne!(
+        exit_code,
+        0,
+        "Backend SHOULD have REJECTED the VerifiedProgram with invalid signature.\n\
+         stderr: {}",
+        stderr
+    );
+
+    assert!(
+        ir.is_none() || !ir.as_ref().map_or(false, |s| s.contains("define")),
+        "Backend should NOT have emitted LLVM IR for the invalid signature.\n\
+         stderr: {}",
+        stderr
+    );
+
+    eprintln!("  RESULT: Backend correctly REJECTED the invalid signature.");
+    eprintln!("  The HMAC comparison is actually performed, not just a length check.\n");
+}
+
+/// Test 4c: The legitimate pipeline (audit_ast → backend) should still work
+/// end-to-end with the HMAC signature in place. This confirms that Fix 2
+/// doesn't break the honest path.
+#[test]
+fn stage_4c_legitimate_pipeline_still_works() {
+    let program = valid_program();
+    let encoded = program.encode_to_vec();
+
+    // Set the signing key for the analyzer
+    std::env::set_var("NEURO_SIGNING_KEY", "test-secret-key-for-stage4c");
+
+    let verified_bytes = audit_ast(&encoded).expect("audit_ast should succeed for a valid program");
+
+    // Set the same key for the backend
+    let (exit_code, _stdout, stderr, ir) = run_backend_with_key(
+        &verified_bytes,
+        "stage4c_legitimate",
+        "test-secret-key-for-stage4c",
+    );
+
+    eprintln!("=== Stage 4c: Legitimate pipeline with HMAC ===");
+    eprintln!("  Ran the full audit_ast → backend pipeline with signing enabled.");
+
+    assert_eq!(
+        exit_code,
+        0,
+        "Backend should exit 0 for a legitimately signed program.\n\
+         stderr: {}",
+        stderr
+    );
+
+    let ir_content = ir.expect("output .ll file should exist");
+    assert!(
+        ir_content.contains("define"),
+        "Emitted IR should contain function definitions.\nIR:\n{}",
+        ir_content
+    );
+
+    eprintln!("  RESULT: Legitimate pipeline works correctly with HMAC signing.");
+    eprintln!("  The fix doesn't break the honest path.\n");
+}
+
+/// Test 4d: Missing NEURO_SIGNING_KEY on the backend side should also fail closed.
+/// This confirms that the backend refuses to operate without the signing key.
+#[test]
+fn stage_4d_missing_key_on_backend_fails_closed() {
+    let program = valid_program();
+    let encoded = program.encode_to_vec();
+
+    // Set a key for the analyzer so it can sign
+    std::env::set_var("NEURO_SIGNING_KEY", "test-key");
+
+    let verified_bytes = audit_ast(&encoded).expect("audit_ast should succeed");
+
+    // Run backend WITHOUT the key (use env_remove on the child process)
+    let input_path = std::env::temp_dir().join("boundary_stage4d_no_backend_key.verified.ast");
+    let output_path = std::env::temp_dir().join("boundary_stage4d_no_backend_key.output.ll");
+    fs::write(&input_path, &verified_bytes).expect("write verified ast");
+
+    let backend_bin = project_root().join("backend/build/neuro_backend");
+    let output = Command::new(&backend_bin)
+        .arg(input_path.to_str().unwrap())
+        .arg(output_path.to_str().unwrap())
+        .env_remove("NEURO_SIGNING_KEY")
+        .output()
+        .expect("failed to invoke backend");
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    fs::remove_file(&input_path).ok();
+    fs::remove_file(&output_path).ok();
+
+    eprintln!("=== Stage 4d: Missing key on backend ===");
+    eprintln!("  Signed with key, but backend has no NEURO_SIGNING_KEY set.");
+
+    assert_ne!(
+        exit_code,
+        0,
+        "Backend SHOULD fail closed when NEURO_SIGNING_KEY is not set.\n\
+         stderr: {}",
+        stderr
+    );
+
+    eprintln!("  RESULT: Backend correctly fails closed without NEURO_SIGNING_KEY.\n");
+}
+
+// ─── Overhead Measurement ────────────────────────────────────────────
+
+#[test]
+fn measure_signing_overhead() {
+    let program = valid_program();
+    let key = "overhead-measurement-key";
+
+    // --- Byte count ---
+    let unsigned = VerifiedProgram {
+        program: Some(program.clone()),
+        borrow_check_passed: true,
+        type_check_passed: true,
+        signature: vec![],
+    };
+    let unsigned_bytes = unsigned.encode_to_vec();
+
+    std::env::set_var("NEURO_SIGNING_KEY", key);
+    let signed_bytes = sign_verified_program(&unsigned, key);
+
+    eprintln!("=== Overhead Measurement ===");
+    eprintln!("  Unsigned VerifiedProgram: {} bytes", unsigned_bytes.len());
+    eprintln!("  Signed VerifiedProgram:   {} bytes", signed_bytes.len());
+    eprintln!("  Signature overhead:       {} bytes (HMAC-SHA256)", signed_bytes.len() - unsigned_bytes.len());
+
+    // --- Sign timing (Rust analyzer side) ---
+    let iterations = 200;
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        let _ = sign_verified_program(&unsigned, key);
+    }
+    let sign_elapsed = start.elapsed();
+    let sign_per_op = sign_elapsed / iterations;
+    eprintln!("  Sign (Rust, {} iters):  {:?} total, {:?}/op", iterations, sign_elapsed, sign_per_op);
+
+    // --- Verify timing (simulated — same HMAC computation as C++ backend) ---
+    let signed_vp = VerifiedProgram::decode(signed_bytes.as_slice()).unwrap();
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        let program_bytes = signed_vp.program.as_ref().unwrap().encode_to_vec();
+        let mut data = Vec::new();
+        data.extend_from_slice(&(program_bytes.len() as u64).to_le_bytes());
+        data.extend_from_slice(&program_bytes);
+        data.push(signed_vp.borrow_check_passed as u8);
+        data.push(signed_vp.type_check_passed as u8);
+        type H = Hmac<Sha256>;
+        let mut mac = H::new_from_slice(key.as_bytes()).unwrap();
+        mac.update(&data);
+        let tag = mac.finalize().into_bytes().to_vec();
+        let _ = tag == signed_vp.signature;
+    }
+    let verify_elapsed = start.elapsed();
+    let verify_per_op = verify_elapsed / iterations;
+    eprintln!("  Verify (Rust, {} iters): {:?} total, {:?}/op", iterations, verify_elapsed, verify_per_op);
+    eprintln!("  Combined sign+verify:    {:?}/op", sign_per_op + verify_per_op);
+    eprintln!();
 }

@@ -102,6 +102,9 @@ fn test_end_to_end_linking() {
     };
 
     // Step 1: Analyze
+    let key = "linking-test-hmac-key";
+    std::env::set_var("NEURO_SIGNING_KEY", key);
+
     let encoded = prog.encode_to_vec();
     let verified = audit_ast(&encoded).expect("audit_ast should succeed");
 
@@ -117,6 +120,7 @@ fn test_end_to_end_linking() {
     let be_out = Command::new(&backend_bin)
         .arg(verified_path.to_str().unwrap())
         .arg(ll_path.to_str().unwrap())
+        .env("NEURO_SIGNING_KEY", key)
         .output()
         .expect("backend invocation");
     assert!(be_out.status.success(),
