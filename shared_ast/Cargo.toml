@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 prost = "0.11"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
 
 [build-dependencies]
 prost-build = "0.11"

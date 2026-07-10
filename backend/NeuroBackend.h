@@ -30,6 +30,9 @@ private:
     std::string newRegister();
     std::string emitGlobalString(const std::string& content, size_t& outLen);
 
+    bool verifySignature(const neuro::ast::VerifiedProgram& verified);
+    std::string computeHmac(const neuro::ast::Program& program, bool borrow_check_passed, bool type_check_passed, const std::string& key);
+
     int regCounter_{0};
     int globalStringCounter_{0};
     std::vector<std::string> globalStrings_;

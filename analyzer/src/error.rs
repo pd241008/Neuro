@@ -13,6 +13,9 @@ pub enum NeuroError {
     #[error("Failed to deserialize AST: {0}")]
     DeserializationError(String),
 
+    #[error("Signing error: {0}")]
+    SigningError(String),
+
     #[error("{0}")]
     IoError(String),
 }

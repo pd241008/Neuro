@@ -2,6 +2,9 @@
 #include "build/ast.pb.h"
 #include <iostream>
 #include <cassert>
+#include <openssl/hmac.h>
+#include <openssl/evp.h>
+#include <cstring>
 
 using namespace neuro::ast;
 
@@ -62,6 +65,11 @@ std::string LLVMEmitter::typeToLLVM(int kind) {
 }
 
 bool LLVMEmitter::emitProgram(const VerifiedProgram& verified) {
+    // Verify HMAC signature first
+    if (!verifySignature(verified)) {
+        return false;
+    }
+
     if (!verified.has_program()) {
         error_ = "VerifiedProgram missing Program";
         return false;
@@ -447,4 +455,63 @@ void LLVMEmitter::emitExpression(const Expression& expr, std::ostream& block, co
             block << "  " << resultReg << " = add i32 0, 0\n";
             break;
     }
+}
+
+std::string LLVMEmitter::computeHmac(const Program& program, bool borrow_check_passed, bool type_check_passed, const std::string& key) {
+    // Encode fields 1-3 in deterministic order (must match Rust implementation)
+    std::string data;
+    
+    // Encode program bytes
+    std::string program_bytes = program.SerializeAsString();
+    uint64_t program_len = program_bytes.size();
+    data.append(reinterpret_cast<const char*>(&program_len), sizeof(program_len));
+    data.append(program_bytes);
+    
+    // Encode boolean fields as bytes
+    data.push_back(static_cast<char>(borrow_check_passed ? 1 : 0));
+    data.push_back(static_cast<char>(type_check_passed ? 1 : 0));
+    
+    // Compute HMAC-SHA256
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digest_len = 0;
+    
+    HMAC(EVP_sha256(),
+         key.c_str(), key.size(),
+         reinterpret_cast<const unsigned char*>(data.c_str()), data.size(),
+         digest, &digest_len);
+    
+    return std::string(reinterpret_cast<const char*>(digest), digest_len);
+}
+
+bool LLVMEmitter::verifySignature(const neuro::ast::VerifiedProgram& verified) {
+    // Get verification key from environment variable
+    const char* key_env = std::getenv("NEURO_SIGNING_KEY");
+    if (!key_env) {
+        error_ = "NEURO_SIGNING_KEY environment variable not set";
+        return false;
+    }
+    
+    std::string key(key_env);
+    if (key.empty()) {
+        error_ = "NEURO_SIGNING_KEY is empty";
+        return false;
+    }
+    
+    // Check if signature is present
+    if (verified.signature().empty()) {
+        error_ = "VerifiedProgram missing signature";
+        return false;
+    }
+    
+    // Compute expected HMAC
+    const Program& prog = verified.program();
+    std::string expected_sig = computeHmac(prog, verified.borrow_check_passed(), verified.type_check_passed(), key);
+    
+    // Compare signatures (constant-time comparison would be better, but this is sufficient for the paper)
+    if (verified.signature() != expected_sig) {
+        error_ = "HMAC signature verification failed";
+        return false;
+    }
+    
+    return true;
 }

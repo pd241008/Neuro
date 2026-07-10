@@ -9,6 +9,8 @@ analyzer = { path = "../analyzer" }
 shared_ast = { path = "../shared_ast" }
 prost = "0.11"
 which = "4"
+hmac = "0.12"
+sha2 = "0.10"
 
 [[test]]
 name = "symbol_table"

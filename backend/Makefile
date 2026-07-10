@@ -1,6 +1,6 @@
 CXX := g++
 CXXFLAGS := -std=c++17 -I. -I/usr/local/include
-LDFLAGS := $(shell pkg-config --libs protobuf 2>/dev/null || echo "-lprotobuf -L/usr/local/lib")
+LDFLAGS := $(shell pkg-config --libs protobuf 2>/dev/null || echo "-lprotobuf -L/usr/local/lib") -lssl -lcrypto
 BUILD_DIR := build
 
 .PHONY: all clean
