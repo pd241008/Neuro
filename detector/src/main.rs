@@ -1,52 +1,76 @@
-use neuro_detector::{analyze, format_report};
+use clap::Parser;
 use std::path::PathBuf;
-use std::process;
+use tbsg_detect::analyze;
+
+/// Trust Boundary Semantic Gap Detector
+///
+/// Scans an IDL schema and producer/consumer source code to find semantic
+/// fields written by the producer but never read by the consumer.
+#[derive(Parser)]
+#[command(name = "tbsg-detect")]
+#[command(about = "Detect trust boundary semantic gaps in IPC pipelines")]
+struct Cli {
+    /// Path to the IDL schema file (proto3)
+    schema: PathBuf,
+
+    /// Path to the producer source directory
+    producer_dir: PathBuf,
+
+    /// Path to the consumer source directory
+    consumer_dir: PathBuf,
+
+    /// Print findings as JSON
+    #[arg(long)]
+    json: bool,
+}
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let cli = Cli::parse();
 
-    let (proto_path, producer_dir, consumer_dir) = match args.len() {
-        4 => (
-            PathBuf::from(&args[1]),
-            PathBuf::from(&args[2]),
-            PathBuf::from(&args[3]),
-        ),
-        _ => {
-            // Use default paths relative to workspace root
-            let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .to_path_buf();
+    let findings = analyze(&cli.schema, &cli.producer_dir, &cli.consumer_dir);
 
-            (
-                workspace.join("shared_ast").join("ast.proto"),
-                workspace.join("analyzer").join("src"),
-                workspace.join("backend"),
-            )
+    if cli.json {
+        // Minimal JSON output
+        println!("[");
+        for (i, finding) in findings.iter().enumerate() {
+            let max_confidence = finding.write_sites.iter()
+                .map(|w| format!("{}", w.confidence))
+                .max()
+                .unwrap_or_else(|| "LOW".to_string());
+
+            let write_sites: Vec<_> = finding.write_sites.iter().map(|w| {
+                format!(
+                    r#"{{"file":"{}","line":{},"confidence":"{}","content":"{}"}}"#,
+                    w.file_path.display(),
+                    w.line_number,
+                    w.confidence,
+                    w.line_content.replace('\\', "\\\\").replace('"', "\\\"")
+                )
+            }).collect();
+
+            println!(
+                r#"  {{"message":"{}","field":"{}","type":"{}","proto_line":{},"confidence":"{}","writes":[{}],"reads":[]}}"#,
+                finding.field.message_name,
+                finding.field.field_name,
+                finding.field.field_type,
+                finding.field.line_number,
+                max_confidence,
+                write_sites.join(", ")
+            );
+
+            if i < findings.len() - 1 {
+                println!(",");
+            } else {
+                println!();
+            }
         }
-    };
-
-    if !proto_path.exists() {
-        eprintln!("Error: Proto file not found: {}", proto_path.display());
-        process::exit(1);
+        println!("]");
+    } else {
+        let report = tbsg_detect::format_report(&findings);
+        print!("{}", report);
     }
-
-    if !producer_dir.exists() {
-        eprintln!("Error: Producer directory not found: {}", producer_dir.display());
-        process::exit(1);
-    }
-
-    if !consumer_dir.exists() {
-        eprintln!("Error: Consumer directory not found: {}", consumer_dir.display());
-        process::exit(1);
-    }
-
-    let findings = analyze(&proto_path, &producer_dir, &consumer_dir);
-    let report = format_report(&findings);
-
-    print!("{}", report);
 
     if !findings.is_empty() {
-        process::exit(1);
+        std::process::exit(1);
     }
 }
