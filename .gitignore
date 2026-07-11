@@ -21,3 +21,5 @@ backend/build/
 
 # Test results and logs
 results/
+
+survey/

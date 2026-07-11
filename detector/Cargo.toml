@@ -1,16 +1,17 @@
 [package]
-name = "neuro-detector"
-version = "0.1.0"
+name = "tbsg-detect"
+version = "0.2.0"
 edition = "2021"
-description = "Detects unauthenticated provenance boundary vulnerabilities in Neuro compiler pipeline"
+description = "Detects trust boundary semantic gaps in IPC pipelines"
 
 [[bin]]
-name = "neuro-detector"
+name = "tbsg-detect"
 path = "src/main.rs"
 
 [dependencies]
 regex = "1"
 walkdir = "2"
+clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3"

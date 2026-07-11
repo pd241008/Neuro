@@ -871,5 +871,121 @@ fn measure_signing_overhead() {
     let verify_per_op = verify_elapsed / iterations;
     eprintln!("  Verify (Rust, {} iters): {:?} total, {:?}/op", iterations, verify_elapsed, verify_per_op);
     eprintln!("  Combined sign+verify:    {:?}/op", sign_per_op + verify_per_op);
+
+    // --- End-to-end: sign (Rust) → write file → C++ backend verify+emit → cleanup ---
+    std::env::set_var("NEURO_SIGNING_KEY", key);
+    let backend_bin = project_root().join("backend/build/neuro_backend");
+    assert!(backend_bin.exists(), "Backend binary not found");
+
+    let iterations_e2e = 50;
+    let start = std::time::Instant::now();
+    for _ in 0..iterations_e2e {
+        let signed = sign_verified_program(&unsigned, key);
+        let input_path = std::env::temp_dir().join("overhead_e2e.verified.ast");
+        let output_path = std::env::temp_dir().join("overhead_e2e.output.ll");
+        fs::write(&input_path, &signed).expect("write");
+        let _ = Command::new(&backend_bin)
+            .arg(input_path.to_str().unwrap())
+            .arg(output_path.to_str().unwrap())
+            .env("NEURO_SIGNING_KEY", key)
+            .output();
+        fs::remove_file(&input_path).ok();
+        fs::remove_file(&output_path).ok();
+    }
+    let e2e_total = start.elapsed();
+    let e2e_per_op = e2e_total / iterations_e2e;
+    eprintln!("  E2E (sign+write+C++verify+emit, {} iters): {:?}/op", iterations_e2e, e2e_per_op);
+    eprintln!();
+}
+
+// ─── Timing Side-Channel Micro-Benchmark ──────────────────────────────
+
+#[test]
+fn measure_timing_sidechannel() {
+    use std::time::Instant;
+
+    let backend_bin = project_root().join("backend/build/neuro_backend");
+    assert!(backend_bin.exists(), "Backend binary not found");
+
+    let key = "timing-test-key";
+    let program = valid_program();
+
+    // Signed VP with correct key (baseline — should succeed)
+    let signed = sign_verified_program(
+        &VerifiedProgram {
+            program: Some(program.clone()),
+            borrow_check_passed: true,
+            type_check_passed: true,
+            signature: vec![],
+        },
+        key,
+    );
+
+    // Signed VP with WRONG signature (key present, sig wrong)
+    let mut wrong_sig = signed.clone();
+    let last = wrong_sig.len() - 1;
+    wrong_sig[last] ^= 0xFF; // flip last byte
+
+    // Unsigned VP (no signature field — key present, no sig)
+    let unsigned = VerifiedProgram {
+        program: Some(program.clone()),
+        borrow_check_passed: true,
+        type_check_passed: true,
+        signature: vec![],
+    };
+    let unsigned_bytes = unsigned.encode_to_vec();
+
+    let iterations = 1000;
+    let input_dir = std::env::temp_dir();
+
+    // --- Case A: correct key, wrong signature ---
+    std::env::set_var("NEURO_SIGNING_KEY", key);
+    let start = Instant::now();
+    for _ in 0..iterations {
+        let ip = input_dir.join("timing_a.verified.ast");
+        let op = input_dir.join("timing_a.output.ll");
+        fs::write(&ip, &wrong_sig).unwrap();
+        let _ = Command::new(&backend_bin)
+            .arg(ip.to_str().unwrap())
+            .arg(op.to_str().unwrap())
+            .env("NEURO_SIGNING_KEY", key)
+            .output();
+        fs::remove_file(&ip).ok();
+        fs::remove_file(&op).ok();
+    }
+    let wrong_sig_elapsed = start.elapsed();
+    let wrong_sig_per_op = wrong_sig_elapsed / iterations;
+
+    // --- Case B: key present, no signature ---
+    let start = Instant::now();
+    for _ in 0..iterations {
+        let ip = input_dir.join("timing_b.verified.ast");
+        let op = input_dir.join("timing_b.output.ll");
+        fs::write(&ip, &unsigned_bytes).unwrap();
+        let _ = Command::new(&backend_bin)
+            .arg(ip.to_str().unwrap())
+            .arg(op.to_str().unwrap())
+            .env("NEURO_SIGNING_KEY", key)
+            .output();
+        fs::remove_file(&ip).ok();
+        fs::remove_file(&op).ok();
+    }
+    let no_sig_elapsed = start.elapsed();
+    let no_sig_per_op = no_sig_elapsed / iterations;
+
+    eprintln!("=== Timing Side-Channel Micro-Benchmark ({} iterations) ===", iterations);
+    eprintln!("  Case A (key set, wrong signature):  {:?}/op", wrong_sig_per_op);
+    eprintln!("  Case B (key set, no signature):     {:?}/op", no_sig_per_op);
+    let delta = if wrong_sig_per_op > no_sig_per_op {
+        wrong_sig_per_op - no_sig_per_op
+    } else {
+        no_sig_per_op - wrong_sig_per_op
+    };
+    eprintln!("  Delta:                              {:?}/op", delta);
+    eprintln!("  Conclusion: {}", if delta.as_nanos() < 1000 {
+        "NOT EXPLOITABLE — delta < 1µs (within measurement noise)"
+    } else {
+        "INCONCLUSIVE — delta > 1µs, may warrant constant-time comparison"
+    });
     eprintln!();
 }
