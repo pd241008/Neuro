@@ -164,7 +164,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 Distributed under the MIT License. See `LICENSE` for more information.
 
 <p align="center">
-  Built with 🦀 and ☕ by the Prathmesh Desai
+  Built with ☕ by the Prathmesh Desai
 </p>
 
 _[pd241008](https://github.com/pd241008) · [ct-os-dev-portfolio.vercel.app](https://ct-os-dev-portfolio.vercel.app)_
