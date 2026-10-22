@@ -1,8 +1,8 @@
 [package]
 name = "tbsg-detect"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "Detects trust boundary semantic gaps in IPC pipelines"
+description = "Detects trust boundary semantic gaps in IPC pipelines (v0.3.0: control-flow-guard vs pass-through read classification)"
 
 [[bin]]
 name = "tbsg-detect"

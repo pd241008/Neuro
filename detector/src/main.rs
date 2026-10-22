@@ -8,7 +8,8 @@ use tbsg_detect::analyze;
 /// fields written by the producer but never read by the consumer.
 #[derive(Parser)]
 #[command(name = "tbsg-detect")]
-#[command(about = "Detect trust boundary semantic gaps in IPC pipelines")]
+#[command(version)]
+#[command(about = "Detect trust boundary semantic gaps in IPC pipelines (v0.3.0: classifies reads as control-flow guards vs pass-through)")]
 struct Cli {
     /// Path to the IDL schema file (proto3)
     schema: PathBuf,
@@ -48,14 +49,26 @@ fn main() {
                 )
             }).collect();
 
+            let read_sites: Vec<_> = finding.read_sites.iter().map(|r| {
+                format!(
+                    r#"{{"file":"{}","line":{},"kind":"{}","content":"{}"}}"#,
+                    r.file_path.display(),
+                    r.line_number,
+                    r.kind,
+                    r.line_content.replace('\\', "\\\\").replace('"', "\\\"")
+                )
+            }).collect();
+
             println!(
-                r#"  {{"message":"{}","field":"{}","type":"{}","proto_line":{},"confidence":"{}","writes":[{}],"reads":[]}}"#,
+                r#"  {{"message":"{}","field":"{}","type":"{}","proto_line":{},"confidence":"{}","verdict":"{}","writes":[{}],"reads":[{}]}}"#,
                 finding.field.message_name,
                 finding.field.field_name,
                 finding.field.field_type,
                 finding.field.line_number,
                 max_confidence,
-                write_sites.join(", ")
+                finding.verdict.tag(),
+                write_sites.join(", "),
+                read_sites.join(", ")
             );
 
             if i < findings.len() - 1 {

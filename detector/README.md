@@ -1,5 +1,28 @@
 # Neuro Unauthenticated Provenance Boundary Detector
 
+> **v0.3.0 (2026-10-22):** consumer reads of a semantic safety boolean are now
+> **classified by context** instead of merely counted:
+>
+> - `[CONTROL-FLOW-GUARD]` — the read sits inside an `if`/`switch`/`assert`
+>   condition, i.e. the field actually gates execution. If cryptographic
+>   authentication markers (`CRYPTO_memcmp`, `HMAC(`, `hmac::`, `ct_eq`, …)
+>   are present in the consumer tree, the tag becomes
+>   `[AUTHENTICATED_CONTROL_FLOW_GUARD]` (clean).
+> - `[PASS-THROUGH]` — the read is merely fed into a buffer/hash/serialization
+>   call (e.g. `computeHmac(prog, verified.borrow_check_passed(), …)`). If
+>   every read of a field is pass-through, the verdict is
+>   `UNENFORCED_SERIALIZATION_READ` — this closes the v0.2.0 false-clean where
+>   "reading verified.borrow_check_passed() inside computeHmac() counted as a
+>   read" (reviewer #608A).
+> - `[OTHER]` — unrecognized context; treated as a read for backwards
+>   compatibility with v0.2 behavior.
+>
+> Aggregate verdicts: `UNREAD_ATTESTATION` (never read, v0.2 finding) ·
+> `UNENFORCED_SERIALIZATION_READ` (v0.3 finding) · `CONTROL_FLOW_GUARD` ·
+> `AUTHENTICATED_CONTROL_FLOW_GUARD` (clean). New API: `classify_read_kind`,
+> `classify_verdict`, `has_crypto_verification`; new unit + integration tests.
+> Verified against three Bastion states (pre-fix / HMAC-only / full fix) and
+> two real toolchains — see `../results/detector/v0.3.0_results.md`.
 A static analysis tool that detects a specific class of vulnerabilities in the Neuro compiler pipeline: **unauthenticated provenance boundaries** where safety-relevant metadata is produced but never verified by consumers.
 
 ## What It Does

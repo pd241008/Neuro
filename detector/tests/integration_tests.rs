@@ -1,7 +1,10 @@
 use std::fs;
 use tempfile::TempDir;
 use std::path::Path;
-use tbsg_detect::{analyze, parse_proto, find_write_sites, find_read_sites, IdlField};
+use tbsg_detect::{
+    analyze, parse_proto, find_write_sites, find_read_sites, classify_verdict, classify_read_kind,
+    IdlField, ReadSite, ReadKind, VerificationVerdict,
+};
 
 fn create_proto_file(tmp: &Path, content: &str) -> std::path::PathBuf {
     let path = tmp.join("schema.proto");
@@ -510,10 +513,160 @@ fn test_report_format() {
             confidence: Confidence::High,
         }],
         read_sites: vec![],
+        verdict: VerificationVerdict::UnreadAttestation,
     }];
 
     let report = format_report(&findings);
     assert!(report.contains("Trust Boundary Semantic Gap"));
     assert!(report.contains("borrow_check_passed"));
     assert!(report.contains("HIGH"));
+    assert!(report.contains("UNREAD_ATTESTATION"));
+}
+
+// ── v0.3.0: read-classification tests ─────────────────────────────────
+
+/// Reviewer #608A regression: a consumer whose ONLY read of the safety
+/// boolean is inside computeHmac() — a pass-through/serialization read —
+/// must still be flagged, even though v0.2 counted it as a "read".
+#[test]
+fn test_passthrough_read_flagged() {
+    let tmp = TempDir::new().unwrap();
+    let schema = create_proto_file(tmp.path(), r#"
+syntax = "proto3";
+message VerifiedProgram {
+    bool borrow_check_passed = 1;
+}
+"#);
+    let producer = tmp.path().join("producer");
+    let consumer = tmp.path().join("consumer");
+    fs::create_dir_all(&producer).unwrap();
+    fs::create_dir_all(&consumer).unwrap();
+
+    fs::write(
+        producer.join("builder.rs"),
+        "VerifiedProgram { borrow_check_passed: true }",
+    ).unwrap();
+
+    // Consumer reads it only to feed the HMAC input buffer — NOT a guard.
+    fs::write(
+        consumer.join("emitter.cpp"),
+        "std::string expected_sig = computeHmac(prog, verified.borrow_check_passed(), verified.type_check_passed(), key);",
+    ).unwrap();
+
+    let read_sites = find_read_sites(&consumer, &[IdlField {
+        message_name: "VerifiedProgram".into(),
+        field_name: "borrow_check_passed".into(),
+        field_type: "bool".into(),
+        line_number: 1,
+    }]);
+    let reads = &read_sites["borrow_check_passed"];
+    assert_eq!(reads.len(), 1);
+    assert_eq!(reads[0].kind, ReadKind::PassThrough);
+
+    let findings = analyze(&schema, &producer, &consumer);
+    assert_eq!(findings.len(), 1, "Pass-through-only read must be flagged");
+    assert_eq!(findings[0].verdict, VerificationVerdict::UnenforcedSerializationRead);
+    assert!(findings[0].verdict.is_finding());
+}
+
+/// Full fix: the consumer gates control flow on the flag inside an if —
+/// clean, authenticated when crypto markers are present.
+#[test]
+fn test_control_flow_guard_clean() {
+    let tmp = TempDir::new().unwrap();
+    let schema = create_proto_file(tmp.path(), r#"
+syntax = "proto3";
+message VerifiedProgram {
+    bool borrow_check_passed = 1;
+}
+"#);
+    let producer = tmp.path().join("producer");
+    let consumer = tmp.path().join("consumer");
+    fs::create_dir_all(&producer).unwrap();
+    fs::create_dir_all(&consumer).unwrap();
+
+    fs::write(
+        producer.join("builder.rs"),
+        "VerifiedProgram { borrow_check_passed: true }",
+    ).unwrap();
+
+    fs::write(
+        consumer.join("emitter.cpp"),
+        "if (!verified.borrow_check_passed() || !verified.type_check_passed()) {\n error = \"bad\";\n return false;\n}\nCRYPTO_memcmp(verified.signature().data(), expected_sig.data(), 32);",
+    ).unwrap();
+
+    let findings = analyze(&schema, &producer, &consumer);
+    assert!(
+        findings.is_empty(),
+        "Control-flow guard read must be clean; got: {:?}",
+        findings.iter().map(|f| f.verdict.tag()).collect::<Vec<_>>()
+    );
+}
+
+/// Direct verdict-aggregation unit checks.
+#[test]
+fn test_verdict_aggregation() {
+    let mk = |kind: ReadKind| ReadSite {
+        file_path: "x.cpp".into(),
+        line_number: 1,
+        line_content: "x".into(),
+        kind,
+    };
+
+    assert_eq!(classify_verdict(&[], false), VerificationVerdict::UnreadAttestation);
+    assert_eq!(
+        classify_verdict(&[mk(ReadKind::PassThrough)], false),
+        VerificationVerdict::UnenforcedSerializationRead
+    );
+    assert_eq!(
+        classify_verdict(&[mk(ReadKind::ControlFlowGuard)], false),
+        VerificationVerdict::ControlFlowGuard
+    );
+    assert_eq!(
+        classify_verdict(&[mk(ReadKind::ControlFlowGuard)], true),
+        VerificationVerdict::AuthenticatedControlFlowGuard
+    );
+    assert_eq!(
+        classify_verdict(&[mk(ReadKind::PassThrough), mk(ReadKind::ControlFlowGuard)], true),
+        VerificationVerdict::AuthenticatedControlFlowGuard
+    );
+    assert_eq!(
+        classify_verdict(&[mk(ReadKind::Other)], false),
+        VerificationVerdict::UnverifiedRead
+    );
+    assert!(!VerificationVerdict::AuthenticatedControlFlowGuard.is_finding());
+}
+
+/// Multi-line conditions: the read is on a line *after* the `if (` opener.
+#[test]
+fn test_multiline_condition_guard() {
+    let lines = [
+        "if (!verified.borrow_check_passed() ||",
+        "    !verified.type_check_passed()) {",
+        "    error_ = \"Semantic attestation flags false\";",
+    ];
+    assert_eq!(classify_read_kind(&lines, 0, "borrow_check_passed"), ReadKind::ControlFlowGuard);
+    assert_eq!(classify_read_kind(&lines, 1, "type_check_passed"), ReadKind::ControlFlowGuard);
+}
+
+/// Comments must never be classified as reads (regression for v0.3.0).
+#[test]
+fn test_comment_reads_not_flagged() {
+    let tmp = TempDir::new().unwrap();
+    let consumer = tmp.path().join("consumer");
+    fs::create_dir_all(&consumer).unwrap();
+    fs::write(
+        consumer.join("c.cpp"),
+        "// if (!verified.borrow_check_passed()) { ... }",
+    ).unwrap();
+    let reads = find_read_sites(
+        &consumer,
+        &[IdlField {
+            message_name: "VerifiedProgram".into(),
+            field_name: "borrow_check_passed".into(),
+            field_type: "bool".into(),
+            line_number: 1,
+        }],
+    );
+    assert!(reads.get("borrow_check_passed").map_or(true, |v| v.is_empty()));
 }
