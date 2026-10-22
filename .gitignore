@@ -23,3 +23,5 @@ backend/build/
 results/
 
 survey/
+
+.tools/*
