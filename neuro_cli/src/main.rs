@@ -4,6 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use miette::Result;
 use std::path::PathBuf;
 use std::process::Command;
+use rand::RngCore;
 
 #[derive(Parser)]
 #[command(name = "neuro")]
@@ -159,6 +160,7 @@ fn run_gui() -> Result<()> {
 }
 
 fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
+    ensure_ephemeral_signing_key();
     println!("{}", "\nNEURO COMPILER PIPELINE INITIATED".cyan().bold());
     println!("{} Source: {}\n", ">".bright_black(), file.display().to_string().yellow());
 
@@ -336,4 +338,17 @@ fn run_pipeline(file: &PathBuf, verbose: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn ensure_ephemeral_signing_key() {
+    let needs_key = std::env::var("NEURO_SIGNING_KEY")
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true);
+
+    if needs_key {
+        let mut raw_key = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut raw_key);
+        let hex_key: String = raw_key.iter().map(|b| format!("{:02x}", b)).collect();
+        std::env::set_var("NEURO_SIGNING_KEY", hex_key);
+    }
 }

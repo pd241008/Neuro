@@ -1,0 +1,100 @@
+name: ci-demo
+# ─────────────────────────────────────────────────────────────────────────────
+# Task 4: CI/CD attack demo (PAPER ARTIFACT — INSECURE BY DESIGN).
+#
+# Emulates the 2-container scenario from the paper with GitHub artifacts as
+# the shared /workspace volume:
+#   Step 1: analyzer job owns NEURO_SIGNING_KEY, signs a valid program.
+#   Step 2: a "poisoner" action (any untrusted action / compromised cache
+#           / fork PR step) overwrites output.verified.ast WITHOUT the key.
+#   Step 3: backend job runs the C++ backend on the poisoned artifact.
+#
+# Expected result:
+#   - against the pre-fix backend: exit 0, use-after-move LLVM IR emitted
+#   - against the fixed backend:   exit 1, "HMAC signature verification failed"
+#   - the poisoner never observes NEURO_SIGNING_KEY/NEURO_SIGNING_KEY
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [demo/ci-attack]
+
+jobs:
+  analyzer:
+    # Step 1 — the only job that holds the signing key (in its isolated env)
+    runs-on: ubuntu-24.04
+    env:
+      NEURO_SIGNING_KEY: ci-demo-prod-signing-key-do-not-leak
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build and sign valid artifact
+        run: |
+          cargo build --release --example ci_payload -p tests
+          target/release/examples/ci_payload normal output.verified.ast
+      - name: Publish artifact to shared "volume"
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-verified-ast
+          path: output.verified.ast
+
+  poisoner:
+    # Step 2 — untrusted CI action: NO signing key available in this job
+    runs-on: ubuntu-24.04
+    needs: analyzer
+    steps:
+      - uses: actions/checkout@v4  # or a fork/fake action that fetches the artifact
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@v4
+        with:
+          name: output-verified-ast
+      - name: Overwrite output.verified.ast with exploit payload (unsigned)
+        run: |
+          cargo build --release --example ci_payload -p tests
+          target/release/examples/ci_payload exploit output.verified.ast
+          echo "::notice::poisoner never received NEURO_SIGNING_KEY"
+      - name: Republish (poisoned) artifact to shared "volume"
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-verified-ast
+          path: output.verified.ast
+
+  backend:
+    # Step 3 — the backend container consumes the (now poisoned) artifact
+    runs-on: ubuntu-24.04
+    needs: poisoner
+    strategy:
+      matrix:
+        backend_build: [pre-fix, fixed]
+    env:
+      NEURO_SIGNING_KEY: ci-demo-prod-signing-key-do-not-leak
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.backend_build == 'pre-fix' && 'c480981' || github.sha }}
+      - name: Build C++ backend
+        run: |
+          cd backend
+          protoc --cpp_out=build -I../shared_ast ../shared_ast/ast.proto
+          make
+      - uses: actions/download-artifact@v4
+        with:
+          name: output-verified-ast
+      - name: Run on poisoned artifact
+        continue-on-error: true
+        run: |
+          set +e
+          ./backend/build/neuro_backend output.verified.ast out.ll
+          echo "backend exit code: $?"
+          if [ ${{ matrix.backend_build }} = pre-fix ]; then
+            echo "EC=$?" >> "$GITHUB_ENV"
+          fi
+      - name: Capture emitted IR / failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-${{ matrix.backend_build }}-result
+          path: |
+            out.ll
+            backend-*.log

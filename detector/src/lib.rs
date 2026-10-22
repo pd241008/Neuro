@@ -52,6 +52,7 @@ pub struct ReadSite {
     pub file_path: PathBuf,
     pub line_number: usize,
     pub line_content: String,
+    pub kind: ReadKind,
 }
 
 /// Confidence that a write-site represents an attestation (not just data)
@@ -72,12 +73,177 @@ impl std::fmt::Display for Confidence {
     }
 }
 
-/// A finding: a field written but never read by the consumer
+/// How the consumer actually uses a read of the safety field (v0.3.0).
+///
+/// A consumer READ alone does not make an attestation meaningful — the read
+/// must gate control flow (decide whether to proceed). A read that is merely
+/// serialized into a buffer/hash (e.g. fed into computeHmac) is decorative.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReadKind {
+    /// Read inside an if/switch/assert condition — the field gates control flow.
+    ControlFlowGuard,
+    /// Read passed into a hash/buffer/serialization call — no enforcement.
+    PassThrough,
+    /// Read without a recognizable guard or pass-through context.
+    Other,
+}
+
+impl std::fmt::Display for ReadKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadKind::ControlFlowGuard => write!(f, "CONTROL-FLOW-GUARD"),
+            ReadKind::PassThrough => write!(f, "PASS-THROUGH"),
+            ReadKind::Other => write!(f, "OTHER"),
+        }
+    }
+}
+
+/// Aggregate verdict for a field based on all consumer reads found (v0.3.0).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VerificationVerdict {
+    /// Field is written but never read by the consumer (v0.2 finding).
+    UnreadAttestation,
+    /// Every consumer read is a serialization/hash pass-through — decorative.
+    UnenforcedSerializationRead,
+    /// Consumer guards control flow with the field (no crypto MAC found).
+    ControlFlowGuard,
+    /// Consumer guards control flow and authenticates the artifact (HMAC etc.).
+    AuthenticatedControlFlowGuard,
+    /// Reads exist but context is unrecognized; treated as non-finding (v0.2 compat).
+    UnverifiedRead,
+}
+
+impl VerificationVerdict {
+    /// Verdicts that count as a security gap (process exit != 0).
+    pub fn is_finding(&self) -> bool {
+        matches!(
+            self,
+            VerificationVerdict::UnreadAttestation
+                | VerificationVerdict::UnenforcedSerializationRead
+        )
+    }
+
+    pub fn tag(&self) -> &'static str {
+        match self {
+            VerificationVerdict::UnreadAttestation => "UNREAD_ATTESTATION",
+            VerificationVerdict::UnenforcedSerializationRead => "UNENFORCED_SERIALIZATION_READ",
+            VerificationVerdict::ControlFlowGuard => "CONTROL_FLOW_GUARD",
+            VerificationVerdict::AuthenticatedControlFlowGuard => "AUTHENTICATED_CONTROL_FLOW_GUARD",
+            VerificationVerdict::UnverifiedRead => "UNVERIFIED_READ",
+        }
+    }
+}
+
+/// Confidence-optimal classification of a read-site by inspecting the
+/// enclosing AST block (line context: the read line and up to 5 preceding
+/// lines). Regex/block inspection — deliberately no tree-sitter dependency.
+pub fn classify_read_kind(lines: &[&str], read_idx: usize, field_name: &str) -> ReadKind {
+    let line = lines[read_idx];
+
+    // 1. Control-flow guard directly on the read line.
+    let guard_re = Regex::new(
+        r"\b(if|switch|assert|require|panic|EXPECT_|ASSERT_)\b|assert!|assert_eq!|assert_ne!|expect\(",
+    )
+    .unwrap();
+    if guard_re.is_match(line) && line_contains_field(line, field_name) {
+        return ReadKind::ControlFlowGuard;
+    }
+
+    // 2. Multi-line condition: a condition opener whose parens don't balance
+    //    within 5 lines above the read means the read is inside the condition.
+    for back in 1..=5.min(read_idx) {
+        let prev = lines[read_idx - back];
+        let open_cond = Regex::new(r"\b(if|switch|assert|require)\s*\(").unwrap();
+        if open_cond.is_match(prev) && prev.matches('(').count() > prev.matches(')').count() {
+            return ReadKind::ControlFlowGuard;
+        }
+    }
+
+    // 3. Pass-through / serialization read: the field is an argument of (or
+    //    nested inside) a buffer/hash/serialize function that appears BEFORE
+    //    the field access on the line — e.g. computeHmac(prog, verified.flag()).
+    if let Some(field_pos) = earliest_field_pos(line, field_name) {
+        let pass_re = Regex::new(
+            r"(?i)\b(compute|hmac|hash|digest|update|append|push_back|push|extend|insert|memcpy|memset|sprintf|snprintf|serialize|encode|pack|buffer|buf|data|write)",
+        )
+        .unwrap();
+        for m in pass_re.find_iter(line) {
+            if m.start() < field_pos {
+                return ReadKind::PassThrough;
+            }
+        }
+    }
+
+    ReadKind::Other
+}
+
+/// Position of the earliest mention (snake/camel/Pascal) of the field on a line.
+fn earliest_field_pos(line: &str, field_name: &str) -> Option<usize> {
+    let (snake, camel, pascal) = field_name_variants(field_name);
+    [&snake, &camel, &pascal]
+        .iter()
+        .filter_map(|v| line.find(v.as_str()))
+        .min()
+}
+
+/// Aggregate a field's read-sites into a verdict.
+///
+/// `has_crypto`: whether the consumer performs cryptographic authentication of
+/// artifacts (HMAC/CRYPTO_memcmp/ct_eq etc.) anywhere in the consumer tree.
+pub fn classify_verdict(reads: &[ReadSite], has_crypto: bool) -> VerificationVerdict {
+    if reads.is_empty() {
+        return VerificationVerdict::UnreadAttestation;
+    }
+    let has_guard = reads.iter().any(|r| r.kind == ReadKind::ControlFlowGuard);
+    let has_passthrough = reads.iter().any(|r| r.kind == ReadKind::PassThrough);
+    if has_guard {
+        if has_crypto {
+            VerificationVerdict::AuthenticatedControlFlowGuard
+        } else {
+            VerificationVerdict::ControlFlowGuard
+        }
+    } else if has_passthrough {
+        // Read exists, but only feeds buffers/hashes — the original
+        // "computeHmac() counts as a read" regression (reviewer #608A).
+        VerificationVerdict::UnenforcedSerializationRead
+    } else {
+        // Reads exist but context is unrecognized; match v0.2 behavior
+        // (a read present counts as a read).
+        VerificationVerdict::UnverifiedRead
+    }
+}
+
+/// Scan consumer code for cryptographic authentication markers.
+pub fn has_crypto_verification(consumer_dir: &Path) -> bool {
+    let marker_re = Regex::new(
+        r"(?i)(CRYPTO_memcmp|HMAC\s*\(|\bhmac::|verify_signature|signature verification|\bct_eq\b|ConstantTimeEq)",
+    )
+    .unwrap();
+
+    for entry in WalkDir::new(consumer_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().extension().map_or(false, |ext| {
+                CONSUMER_EXTENSIONS.contains(&ext.to_str().unwrap_or(""))
+            })
+        })
+    {
+        let content = fs::read_to_string(entry.path()).unwrap_or_default();
+        if marker_re.is_match(&content) {
+            return true;
+        }
+    }
+    false
+}
+
+/// A finding: a field written but never acted upon (gated) by the consumer.
 #[derive(Debug)]
 pub struct Finding {
     pub field: IdlField,
     pub write_sites: Vec<WriteSite>,
     pub read_sites: Vec<ReadSite>,
+    pub verdict: VerificationVerdict,
 }
 
 // ── IDL Schema Parsing ─────────────────────────────────────────────────
@@ -281,8 +447,9 @@ pub fn find_read_sites(consumer_dir: &Path, fields: &[IdlField]) -> HashMap<Stri
         })
     {
         let content = fs::read_to_string(entry.path()).unwrap_or_default();
+        let lines: Vec<&str> = content.lines().collect();
 
-        for (line_num, line) in content.lines().enumerate() {
+        for (line_num, line) in lines.iter().enumerate() {
             let trimmed = line.trim();
             // Skip comments
             if trimmed.starts_with("//") || trimmed.starts_with("#") || trimmed.starts_with("*") {
@@ -293,6 +460,9 @@ pub fn find_read_sites(consumer_dir: &Path, fields: &[IdlField]) -> HashMap<Stri
                 let patterns = generate_read_patterns(&field.field_name);
                 for pattern in &patterns {
                     if line.contains(pattern) {
+                        // v0.3.0: classify how the consumer uses this read
+                        // by inspecting the enclosing block context.
+                        let kind = classify_read_kind(&lines, line_num, &field.field_name);
                         results
                             .entry(field.field_name.clone())
                             .or_insert_with(Vec::new)
@@ -300,6 +470,7 @@ pub fn find_read_sites(consumer_dir: &Path, fields: &[IdlField]) -> HashMap<Stri
                                 file_path: entry.path().to_path_buf(),
                                 line_number: line_num + 1,
                                 line_content: trimmed.to_string(),
+                                kind,
                             });
                         break; // one match per line per field is enough
                     }
@@ -386,6 +557,7 @@ pub fn analyze(
 
     let write_sites = find_write_sites(producer_dir, &fields);
     let read_sites = find_read_sites(consumer_dir, &fields);
+    let has_crypto = has_crypto_verification(consumer_dir);
 
     let mut findings = Vec::new();
 
@@ -393,13 +565,19 @@ pub fn analyze(
         let writes = write_sites.get(&field.field_name).cloned().unwrap_or_default();
         let reads = read_sites.get(&field.field_name).cloned().unwrap_or_default();
 
-        // A finding exists if the field is written but never read by the consumer.
-        // If reads exist, the field is consumed — no finding.
-        if !writes.is_empty() && reads.is_empty() {
+        if writes.is_empty() {
+            continue;
+        }
+
+        // v0.3.0: a write always matters; the verdict depends on how the
+        // consumer uses the field (guard vs pass-through vs never reads it).
+        let verdict = classify_verdict(&reads, has_crypto);
+        if verdict.is_finding() {
             findings.push(Finding {
                 field: field.clone(),
                 write_sites: writes,
                 read_sites: reads,
+                verdict,
             });
         }
     }
@@ -442,6 +620,9 @@ pub fn format_report(findings: &[Finding]) -> String {
             max_confidence
         ));
 
+        report.push_str(&format!("  Verdict: [{}]\n", finding.verdict.tag()));
+        report.push_str(&format!("    {}\n", verdict_explanation(&finding.verdict)));
+
         report.push_str("  Producer write-sites:\n");
         for site in &finding.write_sites {
             report.push_str(&format!(
@@ -453,16 +634,52 @@ pub fn format_report(findings: &[Finding]) -> String {
             ));
         }
 
-        report.push_str("  Consumer read-sites: NONE FOUND\n");
+        if finding.read_sites.is_empty() {
+            report.push_str("  Consumer read-sites: NONE FOUND\n");
+        } else {
+            report.push_str("  Consumer read-sites:\n");
+            for site in &finding.read_sites {
+                report.push_str(&format!(
+                    "    {}:{} [{}] {}\n",
+                    site.file_path.display(),
+                    site.line_number,
+                    site.kind,
+                    site.line_content
+                ));
+            }
+        }
+
         report.push_str("\n");
     }
 
     report.push_str("---\n");
     report.push_str("Severity: HIGH (design-level) if all write-sites are HIGH confidence\n");
     report.push_str("         MEDIUM if any write-sites are MEDIUM/LOW confidence\n");
-    report.push_str("Remediation: Consumer must verify semantic fields before trusting them.\n");
+    report.push_str("Remediation: Consumer must gate control flow on semantic fields,\n");
+    report.push_str("             and authenticate artifacts cryptographically (v0.3.0 rule).\n");
 
     report
+}
+
+/// Human-readable explanation for a verdict.
+fn verdict_explanation(v: &VerificationVerdict) -> String {
+    match v {
+        VerificationVerdict::UnreadAttestation => String::from(
+            "Field is written by the producer but NEVER read by the consumer — decorative attestation."
+        ),
+        VerificationVerdict::UnenforcedSerializationRead => String::from(
+            "Field reads exist, but every read is a pass-through into a buffer/hash/serialization call — NOT a decision point."
+        ),
+        VerificationVerdict::ControlFlowGuard => String::from(
+            "Consumer gates control flow on the field, but no cryptographic artifact authentication was found in the consumer."
+        ),
+        VerificationVerdict::AuthenticatedControlFlowGuard => String::from(
+            "Consumer gates control flow on the field and cryptographically authenticates the artifact."
+        ),
+        VerificationVerdict::UnverifiedRead => String::from(
+            "Field is read, but the read context is unrecognized — no automated classification."
+        ),
+    }
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

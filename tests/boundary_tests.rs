@@ -16,8 +16,14 @@ use sha2::Sha256;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Mutex;
 
 const TEST_SIGNING_KEY: &str = "boundary-test-hmac-key-2026";
+
+/// NEURO_SIGNING_KEY is a process-global; parallel tests in this binary set it
+/// concurrently, so every set_var + audit_ast pair must be serialized or a
+/// test can sign with another test's key (release-mode race).
+static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
 // ─── Helpers (adapted from borrow_check_tests.rs and backend_integration_test.rs) ──
 
@@ -307,6 +313,7 @@ fn stage_1a_valid_program_survives_full_pipeline() {
     let program = valid_program();
     let encoded = program.encode_to_vec();
 
+    let _env = ENV_MUTEX.lock().unwrap();
     std::env::set_var("NEURO_SIGNING_KEY", TEST_SIGNING_KEY);
     let verified_bytes = audit_ast(&encoded).expect("audit_ast should succeed for a valid program");
 
@@ -342,6 +349,7 @@ fn stage_1b_use_after_move_rejected_by_analyzer() {
     let program = use_after_move_program();
     let encoded = program.encode_to_vec();
 
+    let _env = ENV_MUTEX.lock().unwrap();
     std::env::set_var("NEURO_SIGNING_KEY", TEST_SIGNING_KEY);
     let result = audit_ast(&encoded);
     assert!(
@@ -736,7 +744,8 @@ fn stage_4c_legitimate_pipeline_still_works() {
     let program = valid_program();
     let encoded = program.encode_to_vec();
 
-    // Set the signing key for the analyzer
+    // Signed with a different key for stage 4c
+    let _env = ENV_MUTEX.lock().unwrap();
     std::env::set_var("NEURO_SIGNING_KEY", "test-secret-key-for-stage4c");
 
     let verified_bytes = audit_ast(&encoded).expect("audit_ast should succeed for a valid program");
@@ -778,6 +787,7 @@ fn stage_4d_missing_key_on_backend_fails_closed() {
     let encoded = program.encode_to_vec();
 
     // Set a key for the analyzer so it can sign
+    let _env = ENV_MUTEX.lock().unwrap();
     std::env::set_var("NEURO_SIGNING_KEY", "test-key");
 
     let verified_bytes = audit_ast(&encoded).expect("audit_ast should succeed");
@@ -815,6 +825,29 @@ fn stage_4d_missing_key_on_backend_fails_closed() {
     eprintln!("  RESULT: Backend correctly fails closed without NEURO_SIGNING_KEY.\n");
 }
 
+/// Test 4e: Semantic attestation flags false should be rejected even with valid HMAC
+#[test]
+fn test_signed_false_flags_rejected() {
+    let key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    // NOTE: no env var needed — the key is passed explicitly below.
+
+    let program = use_after_move_program();
+    let vp = VerifiedProgram {
+        program: Some(program),
+        borrow_check_passed: false,
+        type_check_passed: true,
+        signature: vec![],
+    };
+    let signed_bytes = sign_verified_program(&vp, key);
+    let output = run_backend_with_key(&signed_bytes, "stage4e_false_flags", key);
+    assert!(
+        output.0 != 0,
+        "Backend must reject artifact when borrow_check_passed is false, even with valid HMAC"
+    );
+    let stderr = output.2;
+    assert!(stderr.contains("Semantic attestation flags false"));
+}
+
 // ─── Overhead Measurement ────────────────────────────────────────────
 
 #[test]
@@ -831,7 +864,7 @@ fn measure_signing_overhead() {
     };
     let unsigned_bytes = unsigned.encode_to_vec();
 
-    std::env::set_var("NEURO_SIGNING_KEY", key);
+    // NOTE: no set_var needed — sign_verified_program takes the key explicitly.
     let signed_bytes = sign_verified_program(&unsigned, key);
 
     eprintln!("=== Overhead Measurement ===");
@@ -873,7 +906,6 @@ fn measure_signing_overhead() {
     eprintln!("  Combined sign+verify:    {:?}/op", sign_per_op + verify_per_op);
 
     // --- End-to-end: sign (Rust) → write file → C++ backend verify+emit → cleanup ---
-    std::env::set_var("NEURO_SIGNING_KEY", key);
     let backend_bin = project_root().join("backend/build/neuro_backend");
     assert!(backend_bin.exists(), "Backend binary not found");
 
@@ -939,7 +971,7 @@ fn measure_timing_sidechannel() {
     let input_dir = std::env::temp_dir();
 
     // --- Case A: correct key, wrong signature ---
-    std::env::set_var("NEURO_SIGNING_KEY", key);
+    // (no env set here — the backend key is passed explicitly per Command)
     let start = Instant::now();
     for _ in 0..iterations {
         let ip = input_dir.join("timing_a.verified.ast");

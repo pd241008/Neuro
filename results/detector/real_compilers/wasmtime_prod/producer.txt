@@ -1,0 +1,2 @@
+Cranelift compiles module.wasm to .cwasm; Engine::append_compiler_info and
+append_bti serialize only compiler feature metadata (target, ISA, pooling).

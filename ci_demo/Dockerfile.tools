@@ -1,0 +1,11 @@
+# Toolchain image for the real-container CI/CD attack demo.
+# Contains everything needed to build the Rust payload generator
+# (analyzer/poisoner step): rust toolchain + protobuf compiler + openssl headers.
+FROM rust:1.83-bookworm
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      pkg-config libssl-dev protobuf-compiler git \
+ && rm -rf /var/lib/apt/lists/*
+
+# Repository is bind-mounted at /src by the demo runner.

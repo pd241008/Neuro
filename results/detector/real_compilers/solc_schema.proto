@@ -1,0 +1,12 @@
+syntax = "proto3";
+// Schema mirror of solc 0.8.24 compiled AST persisted metadata
+// (--combined-json ast): every semantic field solc serializes.
+message ASTNode {
+    string node_type = 1;
+    string type_identifier = 2;
+    bool is_constant = 3;
+    bool is_pure = 4;
+    bool l_value_requested = 5;
+    bool is_lvalue = 6;
+    string type_string = 7;
+}

@@ -1,0 +1,4 @@
+solc --import-ast re-runs the type checker on the reconstructed AST:
+"Failed to import AST: Analysis of the AST failed" for inconsistent metadata;
+consistent-but-false typeDescriptions produce IDENTICAL codegen (no trust).
+There are no attestation suffixes (_passed/_verified/...) in the artifact.

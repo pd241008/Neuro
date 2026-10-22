@@ -1,0 +1,6 @@
+wasmtime Module::deserialize_file (crates/wasmtime/src/module.rs:523) trusts
+Cranelift's compile-time verification: check_compatible
+(crates/wasmtime/src/engine/serialization.rs:75) validates only ELF header,
+version string and feature Metadata — NO attestation bools are serialized,
+and no content MAC protects the machine code (tampered .text accepted, exit 0;
+tampered Metadata rejected: results/audit_wasmtime/AUDIT.md).

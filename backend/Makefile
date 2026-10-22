@@ -7,9 +7,9 @@ BUILD_DIR := build
 
 all: $(BUILD_DIR)/neuro_backend
 
-$(BUILD_DIR)/ast.pb.cc: ../shared_ast/ast.proto
+$(BUILD_DIR)/ast.pb.cc: ../../shared_ast/ast.proto
 	@mkdir -p $(BUILD_DIR)
-	protoc --cpp_out=$(BUILD_DIR) -I../shared_ast ../shared_ast/ast.proto
+	protoc --cpp_out=$(BUILD_DIR) -I../shared_ast ../../shared_ast/ast.proto
 
 $(BUILD_DIR)/ast.pb.o: $(BUILD_DIR)/ast.pb.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
