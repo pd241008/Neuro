@@ -508,7 +508,7 @@ bool LLVMEmitter::verifySignature(const neuro::ast::VerifiedProgram& verified) {
     const Program& prog = verified.program();
     std::string expected_sig = computeHmac(prog, verified.borrow_check_passed(), verified.type_check_passed(), key);
     
-    // Compare signatures (constant-time comparison would be better, but this is sufficient for the paper)
+    // Compare signatures in constant time.
     if (verified.signature().size() != expected_sig.size() ||
         CRYPTO_memcmp(verified.signature().data(), expected_sig.data(), expected_sig.size()) != 0) {
         error_ = "HMAC signature verification failed";

@@ -4,7 +4,7 @@ name: ci-demo
 #
 # Emulates the 2-container scenario from the paper with GitHub artifacts as
 # the shared /workspace volume:
-#   Step 1: analyzer job owns BASTION_SIGNING_KEY, signs a valid program.
+#   Step 1: analyzer job owns NEURO_SIGNING_KEY, signs a valid program.
 #   Step 2: a "poisoner" action (any untrusted action / compromised cache
 #           / fork PR step) overwrites output.verified.ast WITHOUT the key.
 #   Step 3: backend job runs the C++ backend on the poisoned artifact.
@@ -12,7 +12,7 @@ name: ci-demo
 # Expected result:
 #   - against the pre-fix backend: exit 0, use-after-move LLVM IR emitted
 #   - against the fixed backend:   exit 1, "HMAC signature verification failed"
-#   - the poisoner never observes BASTION_SIGNING_KEY/NEURO_SIGNING_KEY
+#   - the poisoner never observes NEURO_SIGNING_KEY/NEURO_SIGNING_KEY
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -25,7 +25,7 @@ jobs:
     # Step 1 — the only job that holds the signing key (in its isolated env)
     runs-on: ubuntu-24.04
     env:
-      BASTION_SIGNING_KEY: ci-demo-prod-signing-key-do-not-leak
+      NEURO_SIGNING_KEY: ci-demo-prod-signing-key-do-not-leak
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -53,7 +53,7 @@ jobs:
         run: |
           cargo build --release --example ci_payload -p tests
           target/release/examples/ci_payload exploit output.verified.ast
-          echo "::notice::poisoner never received BASTION_SIGNING_KEY"
+          echo "::notice::poisoner never received NEURO_SIGNING_KEY"
       - name: Republish (poisoned) artifact to shared "volume"
         uses: actions/upload-artifact@v4
         with:

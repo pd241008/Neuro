@@ -5,7 +5,7 @@
 # Dockerless fallback for ci_demo/docker-compose.yml — reproduces the same
 # steps with three isolated "container" directories plus a shared volume:
 #
-#   Step 1 (Analyzer container):   owns BASTION_SIGNING_KEY, signs a VALID
+#   Step 1 (Analyzer container):   owns NEURO_SIGNING_KEY, signs a VALID
 #                                  program, writes <workspace>/output.verified.ast
 #   Step 2 (Untrusted CI Action):  cache poisoner WITHOUT the key overwrites
 #                                  <workspace>/output.verified.ast with the
@@ -46,7 +46,7 @@ fail=0
 # ── Step 1: Analyzer container (isolated env, owns the key) ───────────────
 log "── Step 1: Analyzer container ──"
 ( cd "$DEMO/analyzer" && \
-  BASTION_SIGNING_KEY="ci-demo-prod-signing-key-do-not-leak" \
+  NEURO_SIGNING_KEY="ci-demo-prod-signing-key-do-not-leak" \
   "$PAYGEN" normal "$WS/output.verified.ast" ) >>"$LOGS/step1_analyzer.log" 2>&1
 if [ ! -f "$WS/output.verified.ast" ]; then
   log "   FAILED — no artifact written"; fail=1
@@ -56,8 +56,8 @@ fi
 log ""
 
 # ── Step 2: Untrusted CI action / cache poisoner (NO key) ─────────────────
-log "── Step 2: Untrusted CI action / cache poisoner (no BASTION_SIGNING_KEY) ──"
-( cd "$DEMO/poisoner" && env -u BASTION_SIGNING_KEY -u NEURO_SIGNING_KEY \
+log "── Step 2: Untrusted CI action / cache poisoner (no NEURO_SIGNING_KEY) ──"
+( cd "$DEMO/poisoner" && env -u NEURO_SIGNING_KEY -u NEURO_SIGNING_KEY \
   "$PAYGEN" exploit "$WS/output.verified.ast" ) >>"$LOGS/step2_poisoner.log" 2>&1
 log "   overwrote $WS/output.verified.ast ($(wc -c <"$WS/output.verified.ast") bytes, UNSIGNED)"
 log "   attacker key exposure: none — $DEMO/poisoner never sees any signing key"
@@ -65,7 +65,7 @@ log ""
 
 # ── Step 3a: Backend container, PRE-FIX backend (no HMAC check) ───────────
 log "── Step 3a: pre-fix backend reads poisoned artifact ──"
-( cd "$DEMO/backend" && env -u BASTION_SIGNING_KEY -u NEURO_SIGNING_KEY \
+( cd "$DEMO/backend" && env -u NEURO_SIGNING_KEY -u NEURO_SIGNING_KEY \
   "$PREFIX_BACKEND" "$WS/output.verified.ast" "$DEMO/backend/prefix_out.ll" ) \
   >"$LOGS/step3a_prefix.stdout.log" 2>"$LOGS/step3a_prefix.stderr.log"
 RC=$?
@@ -99,7 +99,7 @@ log ""
 # ── Control: un-poisoned artifact (honest run) against fixed backend ──────
 log "── Control: fixed backend on the STEP-1 (signed) artifact ──"
 ( cd "$DEMO/analyzer" && \
-  BASTION_SIGNING_KEY="ci-demo-prod-signing-key-do-not-leak" \
+  NEURO_SIGNING_KEY="ci-demo-prod-signing-key-do-not-leak" \
   "$PAYGEN" normal "$DEMO/workspace_honest.verified.ast" ) >>"$LOGS/step1_analyzer.log" 2>&1
 ( cd "$DEMO/backend" && \
   NEURO_SIGNING_KEY="ci-demo-prod-signing-key-do-not-leak" \

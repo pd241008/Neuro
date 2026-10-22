@@ -1,0 +1,29 @@
+[package]
+name = "stm32_signing_station"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "station"
+path = "src/bin/station.rs"
+
+[[bin]]
+name = "host_bench"
+path = "src/bin/host_bench.rs"
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+embedded-hal = "0.2"
+nb = "1.1"
+sha2 = { version = "0.10", default-features = false }
+hmac = "0.12"
+stm32f1xx-hal = { version = "0.9", default-features = false, features = ["stm32f103"] }
+hex = { version = "0.4", optional = true }
+
+[features]
+default = []
+host = ["hex"]

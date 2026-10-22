@@ -4,7 +4,7 @@
 #
 # Three actual containers with a shared Docker volume as /workspace:
 #
-#   1) analyzer  (image bastion-demo-tools):  OWNS BASTION_SIGNING_KEY,
+#   1) analyzer  (image bastion-demo-tools):  OWNS NEURO_SIGNING_KEY,
 #                builds the payload generator and writes the signed artifact.
 #   2) poisoner  (image bastion-demo-tools):  NO signing key in env (exit 99
 #                guard if one leaks), overwrites /workspace/output.verified.ast
@@ -66,12 +66,12 @@ docker volume create "$TGT_VOL"   >/dev/null 2>&1
 PAYLOAD_BIN=/src/target/release/examples/ci_payload
 
 # ── Step 1: analyzer container (owns the key) ──────────────────────────────
-log "── Step 1: ANALYZER container (has BASTION_SIGNING_KEY) ──"
+log "── Step 1: ANALYZER container (has NEURO_SIGNING_KEY) ──"
 docker run --rm \
   --name ci-demo-analyzer \
   -v "$PROJ":/src:ro \
   -v "$VOL":/workspace \
-  -e BASTION_SIGNING_KEY="$KEY" \
+  -e NEURO_SIGNING_KEY="$KEY" \
   "$IMG" bash -c "
     $PAYLOAD_BIN normal /workspace/output.verified.ast
   " >"$LOGS/step1_analyzer.log" 2>&1
@@ -86,13 +86,13 @@ fi
 log ""
 
 # ── Step 2: poisoner container (NO key — that is the point) ───────────────
-log "── Step 2: POISONER container (no BASTION_SIGNING_KEY anywhere in env) ──"
+log "── Step 2: POISONER container (no NEURO_SIGNING_KEY anywhere in env) ──"
 docker run --rm \
   --name ci-demo-poisoner \
   -v "$PROJ":/src:ro \
   -v "$VOL":/workspace \
   -w /src "$IMG" bash -c "
-    if env | grep -q '^BASTION_SIGNING_KEY='; then echo 'FATAL: signing key leaked into poisoner env'; exit 99; fi
+    if env | grep -q '^NEURO_SIGNING_KEY='; then echo 'FATAL: signing key leaked into poisoner env'; exit 99; fi
     $PAYLOAD_BIN exploit /workspace/output.verified.ast
   " >"$LOGS/step2_poisoner.log" 2>&1
 RC=$?
@@ -160,7 +160,7 @@ HONEST=bastion-demo-honest
 docker volume create "$HONEST" >/dev/null
 docker run --rm \
   -v "$PROJ":/src:ro -v "$HONEST":/workspace \
-  -e BASTION_SIGNING_KEY="$KEY" "$IMG" bash -c "
+  -e NEURO_SIGNING_KEY="$KEY" "$IMG" bash -c "
     $PAYLOAD_BIN normal /workspace/honest.verified.ast
   " >>"$LOGS/step1_analyzer.log" 2>&1
 docker run --rm \

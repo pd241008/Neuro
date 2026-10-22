@@ -6,25 +6,25 @@ Found 2 field(s) with potential TBSG (written by producer, not read by consumer)
   Verdict: [UNENFORCED_SERIALIZATION_READ]
     Field reads exist, but every read is a pass-through into a buffer/hash/serialization call — NOT a decision point.
   Producer write-sites:
-    /tmp/bastion-hmac/analyzer/src/lib.rs:28 [LOW] fn compute_hmac(program: &Program, borrow_check_passed: bool, type_check_passed: bool, key: &[u8]) -> Vec<u8> {
-    /tmp/bastion-hmac/analyzer/src/lib.rs:38 [LOW] mac.update(&[borrow_check_passed as u8]);
-    /tmp/bastion-hmac/analyzer/src/lib.rs:50 [HIGH] let borrow_check_passed = true;
-    /tmp/bastion-hmac/analyzer/src/lib.rs:61 [MEDIUM] let signature = compute_hmac(&program, borrow_check_passed, type_check_passed, key.as_bytes());
-    /tmp/bastion-hmac/analyzer/src/lib.rs:65 [LOW] borrow_check_passed,
+    analyzer/src/lib.rs:28 [LOW] fn compute_hmac(program: &Program, borrow_check_passed: bool, type_check_passed: bool, key: &[u8]) -> Vec<u8> {
+    analyzer/src/lib.rs:38 [LOW] mac.update(&[borrow_check_passed as u8]);
+    analyzer/src/lib.rs:50 [HIGH] let borrow_check_passed = true;
+    analyzer/src/lib.rs:61 [MEDIUM] let signature = compute_hmac(&program, borrow_check_passed, type_check_passed, key.as_bytes());
+    analyzer/src/lib.rs:65 [LOW] borrow_check_passed,
   Consumer read-sites:
-    /tmp/bastion-hmac/backend/LLVMEmitter.cpp:508 [PASS-THROUGH] std::string expected_sig = computeHmac(prog, verified.borrow_check_passed(), verified.type_check_passed(), key);
+    /tmp/det_consumer/hmac/LLVMEmitter.cpp:508 [PASS-THROUGH] std::string expected_sig = computeHmac(prog, verified.borrow_check_passed(), verified.type_check_passed(), key);
 
 [2] VerifiedProgram.type_check_passed (bool, proto line 24, confidence: LOW)
   Verdict: [UNENFORCED_SERIALIZATION_READ]
     Field reads exist, but every read is a pass-through into a buffer/hash/serialization call — NOT a decision point.
   Producer write-sites:
-    /tmp/bastion-hmac/analyzer/src/lib.rs:28 [LOW] fn compute_hmac(program: &Program, borrow_check_passed: bool, type_check_passed: bool, key: &[u8]) -> Vec<u8> {
-    /tmp/bastion-hmac/analyzer/src/lib.rs:39 [LOW] mac.update(&[type_check_passed as u8]);
-    /tmp/bastion-hmac/analyzer/src/lib.rs:51 [HIGH] let type_check_passed = true;
-    /tmp/bastion-hmac/analyzer/src/lib.rs:61 [MEDIUM] let signature = compute_hmac(&program, borrow_check_passed, type_check_passed, key.as_bytes());
-    /tmp/bastion-hmac/analyzer/src/lib.rs:66 [LOW] type_check_passed,
+    analyzer/src/lib.rs:28 [LOW] fn compute_hmac(program: &Program, borrow_check_passed: bool, type_check_passed: bool, key: &[u8]) -> Vec<u8> {
+    analyzer/src/lib.rs:39 [LOW] mac.update(&[type_check_passed as u8]);
+    analyzer/src/lib.rs:51 [HIGH] let type_check_passed = true;
+    analyzer/src/lib.rs:61 [MEDIUM] let signature = compute_hmac(&program, borrow_check_passed, type_check_passed, key.as_bytes());
+    analyzer/src/lib.rs:66 [LOW] type_check_passed,
   Consumer read-sites:
-    /tmp/bastion-hmac/backend/LLVMEmitter.cpp:508 [PASS-THROUGH] std::string expected_sig = computeHmac(prog, verified.borrow_check_passed(), verified.type_check_passed(), key);
+    /tmp/det_consumer/hmac/LLVMEmitter.cpp:508 [PASS-THROUGH] std::string expected_sig = computeHmac(prog, verified.borrow_check_passed(), verified.type_check_passed(), key);
 
 ---
 Severity: HIGH (design-level) if all write-sites are HIGH confidence

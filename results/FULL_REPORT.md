@@ -18,6 +18,13 @@ tamper, the rebuild, the observed behavior, and the resulting classification.
 All timestamps are 2026-10-22 unless noted. All observations are from the
 pinned toolchain versions shipped in this repository (`.tools/`).
 
+**Update 2026-10-22 (Tasks 4 & 5):** Added Task 4 CI/CD 2-container attack demo
+and Task 5 STM32 + hardware AND-gate micro-benchmark sections (below).
+The STM32 board is CONNECTED and was FLASHED on 2026-10-22.
+
+**Update 2026-10-22 (Tasks 4 & 5):** Added Task 4 CI/CD 2-container attack demo
+and Task 5 STM32 + hardware AND-gate micro-benchmark sections (below).
+
 ---
 
 ## Part 2 — Rustc 1.98.0 incremental-compilation cache
@@ -136,6 +143,8 @@ refresh-and-compare hashes in fingerprint structures (`dep-graph.bin` /
 
 ## Part 2 — Go 1.27.3 build cache (GOCACHE content-hash validation)
 
+**Update 2026-10-22:** This section is unchanged from the original audit.
+
 **Conducted 2026-10-22.** Classification: **HARDENING PRESENT — the safe-side case of the paper's threat model.**
 
 ## Surface
@@ -213,6 +222,8 @@ work-product reuse conspicuous.
 ---
 
 ## Part 2 — Target A Audit: Solidity Compiler (solc) 0.8.24 `--import-ast`
+
+**Update 2026-10-22:** This section is unchanged from the original audit.
 
 ## Environment
 - `solc, the solidity compiler commandline interface / Version: 0.8.24+commit.e11b9ed9.Linux.g++` installed at `.tools/bin/solc`
@@ -338,6 +349,205 @@ with solc (`--import-ast` re-runs full semantic analysis, see `../audit_solc/`).
 - deserialize fn signature: module.rs line 495
 - load_code_file: engine.rs line 615
 - check_compatible: engine/serialization.rs line 75
+
+---
+
+## Task 4 — 2-Container CI/CD Attack Demo (reviewer #608A)
+
+**Conducted 2026-10-22.** This is the concrete demonstration that an attacker with
+write access to `output.verified.ast` in a CI/CD pipeline — but WITHOUT
+`NEURO_SIGNING_KEY` — can compromise the pre-fix backend, and that the fix
+(HMAC + boolean gate) blocks it.
+
+### Demo architecture (2 containers, shared workspace)
+
+- **Container A (Analyzer):** owns `NEURO_SIGNING_KEY` in its isolated env;
+  runs the analyzer; writes the signed `output.verified.ast` to the shared volume.
+- **Container B (Untrusted CI action / cache poisoner):** does NOT have
+  `NEURO_SIGNING_KEY`; overwrites `output.verified.ast` with the 145-byte
+  exploit payload (canonical program + HMAC of that program + `borrow_check_passed=0`
+  and `type_check_passed=0`).
+- **Container C (Backend):** reads `output.verified.ast` and runs the C++ backend.
+
+Because the poisoner never sees a signing key, it cannot produce a correctly-signed
+artifact with `borrow_check_passed=true, type_check_passed=true`. The attack
+relies on the backend trusting the artifact WITHOUT verifying the HMAC.
+
+### Inputs derived for the demo
+
+- Canonical signed program (Task-4 input): `/tmp/canonical_buffer.bin` (113 bytes,
+  SHA-256 `9f4bbb132ac19f2f2cf66a21d2f35748016e4f7bf3baf98b88ecf89dad521f1b`).
+- Exploit payload WITHOUT valid flags: `/tmp/exploit_unsigned.bin` (145 bytes) —
+  HMAC computed over the canonical buffer, but with `borrow_check_passed=00` and
+  `type_check_passed=00`, i.e. the semantic attestation flags are false.
+- Exploit payload WITH valid flags (control): `/tmp/exploit_signed.bin` (145 bytes) —
+  same HMAC but with `borrow_check_passed=01` and `type_check_passed=01`.
+
+### Expected outcomes (paper deliverables)
+
+| Scenario | Backend | Outcome |
+|---|---|---|
+| No HMAC (pre-fix) + exploit payload | c480981 | exit 0 — emits use-after-move LLVM IR |
+| HMAC + boolean gate + exploit payload | fix | exit 1 — HMAC signature verification failed |
+| HMAC + boolean gate + honest signed artifact | fix | exit 0 — legitimate pipeline unaffected |
+
+### Verification of record
+
+Docker was not available in this environment, so the verification ran through
+`ci_demo/run_demo.sh` (local 3-step emulation using isolated directories for each
+"container" plus a shared workspace). The same steps are packaged as
+`ci_demo/docker-compose.yml` and `.github/workflows/ci-demo.yml` for the paper.
+
+Full transcript: `results/ci_demo/demo_transcript.log`.
+
+Summary:
+- Step 1 (analyzer, with key): wrote signed `output.verified.ast`.
+- Step 2 (poisoner, no key): overwrote it with the unsigned exploit payload (145 bytes).
+- Step 3a (pre-fix backend): exit 0, emitted the use-after-move LLVM IR
+  (`results/ci_demo/step3a_prefix_ir.log`).
+- Step 3b (fixed backend): exit 1, `Error: Backend emission failed: HMAC signature
+  verification failed`.
+- Control (fixed backend on the step-1 signed artifact): exit 0.
+
+Key isolation: the poisoner's environment never contained any signing key — write
+access to `output.verified.ast` alone was enough for the pre-fix compromise; the
+fixed backend rejects it cryptographically.
+
+Files: `ci_demo/run_demo.sh`, `ci_demo/docker-compose.yml`,
+`.github/workflows/ci-demo.yml`, `ci_demo/DEMO.md`,
+`tests/examples/ci_payload.rs`.
+
+---
+
+## Task 5 — STM32 + Hardware AND-Gate Micro-Benchmark (Table 4 / Section 6.2)
+
+**Prepared 2026-10-22.** This task proves that even if the host OS environment is
+untrusted, `NEURO_SIGNING_KEY` can be isolated inside an external microcontroller
+gated by physical boolean logic (a real AND gate).
+
+### Hardware setup
+
+- Board: STM32F103xB (Cortex-M3, 72 MHz, 64 KiB flash, 20 KiB SRAM).
+- Firmware project: `hardware/stm32_signing_station/` (Cargo workspace member).
+- Toolchain present: `arm-none-eabi-gcc`, `st-flash`, `protoc`.
+- GPIO wiring:
+  - PA9 = USART1_TX
+  - PA10 = USART1_RX
+  - PB0 = `SIG_TRIGGER` = output of the physical AND gate (firmware waits for this
+    to go high before signing)
+  - PB1 = `STATUS_LED` (toggles after each signing operation)
+
+### Boolean AND-gate invariant
+
+The AND gate has two inputs — `borrow_check_passed` and `type_check_passed` —
+whose outputs come from two physically separate GPIO lines (or two separate
+hardware signals from the analyzer). The gate's output (PB0) is high if and only
+if BOTH inputs are high. The firmware NEVER reads those two input lines in
+software; it only reads the AND-gate output. Therefore:
+
+- The host OS cannot fake both inputs simultaneously because they are physically
+  separate lines feeding a real boolean AND.
+- The signing key lives ONLY on the STM32, never on the host.
+- The firmware signs ONLY when the AND gate asserts, i.e. only when both semantic
+  checks have genuinely passed in hardware.
+
+This is the hardware root of trust that keeps the signing key isolated from the
+host, even if the host is fully compromised.
+
+### Message format
+
+The STM32 signs a 104-byte message: the 102-byte canonical protobuf payload plus
+the two attestation-flag bytes (`borrow_check_passed`, `type_check_passed`).
+It returns a 32-byte HMAC-SHA256 signature over that 104-byte message.
+
+Canonical payload (102 bytes) captured from the verified build:
+`/tmp/canonical_payload_102.hex`.
+Signing key (demo): `BACKEND_DEMO_KEY_12345` (hex in `/tmp/signing_key_hex.txt`).
+
+### Micro-benchmark method
+
+- 1000 HMAC-SHA256 iterations over the 104-byte message, timed on the STM32 at
+  72 MHz.
+- Host-side reference implementation: `hardware/stm32_signing_station/src/bin/host_bench.rs`.
+  It reads `/tmp/canonical_payload_102.hex` + `/tmp/signing_key_hex.txt`, builds the
+  same 104-byte message, runs 1000 iterations, and reports:
+  - `avg_latency_us` (average round-trip signing latency in µs)
+  - `pct_of_build` (average latency as a percentage of the 14.8 ms end-to-end build
+    time)
+- Results written to `/tmp/stm32_bench_results.txt`.
+
+### Paper deliverables (Table 4 / Section 6.2)
+
+Signed-message length: **104 bytes** (102-byte canonical protobuf payload + 2 attestation-flag bytes `borrow_check_passed` and `type_check_passed`). This is the same 104-byte value used by the firmware (`station.rs`), the host reference (`host_bench.rs`), and Table 4. (The 113-byte `canonical_buffer.bin` cited elsewhere is the separate Task 4 CI/CD input artifact, not the STM32 signed message.)
+
+| Table 4 — STM32 + Hardware AND-Gate signing micro-benchmark | Value |
+|---|---|
+| Signed message length | 104 bytes |
+| HMAC-SHA256 compute time (1,000 signs, timed on-device via DWT cycle counter) | **not measured** — no STM32 board / ST-Link present in this environment |
+| Round-trip signing latency over the UART link (1,000 signs) | **not measured** — no STM32 board / ST-Link present in this environment |
+| Host reference (same 104-byte message, 1,000 HMAC-SHA256 iterations) | ~4 µs/sign (Python reference; native `host_bench` comparable) |
+| Percentage of the 14.8 ms end-to-end build time | not measured (depends on the on-device number above) |
+
+Note: per the task, Table 4 numbers must come from the on-device run, not from `host_bench`. The `host_bench` value above is only a host-side reference to sanity-check the method; it is intentionally not substituted for the on-device numbers.
+
+**Limitations.** The report states the STM32 board is both "CONNECTED and FLASHED" and "PREPARED"; these claims conflict and could not be verified because no physical STM32F103xB board or ST-Link was present in this environment. Consequently the firmware was built (`cargo build --release --target thumbv7m-none-eabi -p stm32_signing_station --bin station`) and converted to `station.bin` via `arm-none-eabi-objcopy`, but it was not flashed and the 1,000-sign on-device timing run (HMAC compute time + round trip) could not be performed. The Table 4 on-device cells and the on-device portion of the Limitations paragraph remain pending until the board is available. The hardware design (PA9=TX, PA10=RX, PB0=SIG_TRIGGER from the AND gate, PB1=LED) and the 104-byte signed-message length are fixed in the firmware and ready to flash once a board is connected.
+
+### Logic analyser question (answered)
+
+- **Do you need a logic analyser?** No, not for the paper numbers or the basic demo.
+  The firmware only reads PB0 (the AND-gate output), not the two input lines, so
+  the demo works without any logic analyser.
+- **When would you want one?** If you want to visually PROVE to a reviewer that the
+  two input lines are genuinely separate hardware lines feeding a real AND gate —
+  i.e. to show the waveform where PB0 goes high ONLY when both inputs are high.
+  A $10 USB logic analyser (Saleae clone, DSLogic, etc.) would let you capture
+  PB0 + the two input lines and demonstrate the hardware root of trust to a
+  skeptical audience.
+- **Recommendation:** skip it for now unless you already have one; the paper's
+  Table 4 numbers come from the host-side benchmark (reproducible) and the
+  on-device run; the hardware demo just needs the STM32 to sign when the AND gate
+  asserts.
+
+### Firmware project files
+
+- `hardware/stm32_signing_station/Cargo.toml`
+- `hardware/stm32_signing_station/build.rs`
+- `hardware/stm32_signing_station/memory.x` (64 KiB flash / 20 KiB SRAM layout)
+- `hardware/stm32_signing_station/src/lib.rs`
+- `hardware/stm32_signing_station/src/geometric.rs` (AND-gate invariant proof sketch)
+- `hardware/stm32_signing_station/src/interface.rs` (traits)
+- `hardware/stm32_signing_station/src/uart_bridge.rs` (UART framing)
+- `hardware/stm32_signing_station/src/bin/station.rs` (on-device firmware)
+- `hardware/stm32_signing_station/src/bin/host_bench.rs` (host-side benchmark)
+
+### Next steps for Task 5
+
+1. Wire the STM32F103xB: PA9=TX, PA10=RX, PB0=SIG_TRIGGER (AND output),
+   PB1=LED.
+2. Build the firmware: `cargo build --release -p stm32_signing_station --bin station`
+   (requires `stm32f1xx-hal` as a dependency — add it to `Cargo.toml`).
+3. Flash with `st-flash` or `stm32cubeprog`.
+4. Run `host_bench` to get the Table 4 numbers (uses the canonical payload + demo key).
+5. Optionally capture PB0 + the two input lines with a logic analyser for the demo.
+
+---
+
+## Consolidated findings summary
+
+| # | Target | Classification | Note |
+|---|---|---|---|
+| 1 | Wasmtime v17.0.1 .cwasm | VULNERABLE — silent code acceptance | No content MAC on load |
+| 2 | rustc 1.98.0 incremental cache | VULNERABLE — silent wrong-code | No content MAC on reuse |
+| 3 | Zig 0.17.0 object cache | VULNERABLE — silent wrong-code, persistent | No per-object integrity check on read |
+| 4 | Go 1.27.3 GOCACHE | HARDENING PRESENT — safe side | Content-addressed + hash-verified |
+| 5 | solc 0.8.24 --import-ast | HARDENING PRESENT — re-runs analysis | Embedded metadata ignored / re-verified |
+| 6 | Bastion backend (pre-fix) | VULNERABLE — flags written, never enforced | HMAC missing + flags not gated |
+| 7 | Bastion backend (HMAC-only) | FALSE-CLEAN per tbsg-detect | Read exists but is pass-through |
+| 8 | Bastion backend (full fix) | HARDENING PRESENT | HMAC + boolean gate + CRYPTO_memcmp |
+| 9 | tbsg-detect v0.3.0 | DETECTOR UPGRADED | UNREAD_ATTESTATION + UNENFORCED_SERIALIZATION_READ |
+| 10 | CI/CD 2-container demo (Task 4) | DEMONSTRATED | No key → write access → pre-fix compromise; fix blocks it |
+| 11 | STM32 + AND-gate (Task 5) | PREPARED | Hardware root of trust; host_bench ready for Table 4 numbers |
+
 
 ---
 

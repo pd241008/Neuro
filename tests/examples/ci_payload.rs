@@ -1,12 +1,12 @@
 //! CI/CD demo payload generator (Task 4 of the paper evaluation).
 //!
-//! Mode `normal`:  signs a valid program with BASTION_SIGNING_KEY (what the
+//! Mode `normal`:  signs a valid program with NEURO_SIGNING_KEY (what the
 //!                 honest analyzer container would write to the shared volume).
 //! Mode `exploit`: hand-crafts the unsigned use-after-move VerifiedProgram
-//!                 with flags=true (the 110-byte cache-poisoner payload the
+//!                 with flags=true (the 145-byte cache-poisoner payload the
 //!                 attacker writes WITHOUT ever seeing the signing key).
 //!
-//! Usage: ci_payload normal <output-file>   (requires BASTION_SIGNING_KEY)
+//! Usage: ci_payload normal <output-file>   (requires NEURO_SIGNING_KEY)
 //!        ci_payload exploit <output-file>
 
 use hmac::{Hmac, Mac};
@@ -161,8 +161,8 @@ fn main() {
 
     match mode {
         "normal" => {
-            let key = std::env::var("BASTION_SIGNING_KEY")
-                .expect("analyzer container must have BASTION_SIGNING_KEY");
+            let key = std::env::var("NEURO_SIGNING_KEY")
+                .expect("analyzer container must have NEURO_SIGNING_KEY");
             let verified = VerifiedProgram {
                 program: Some(valid_program()),
                 borrow_check_passed: true,

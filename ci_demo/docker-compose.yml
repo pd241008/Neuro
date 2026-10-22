@@ -2,12 +2,12 @@
 # Task 4: 2-container CI/CD attack demo (PAPER ARTIFACT — INSECURE BY DESIGN).
 #
 # Reproduces reviewer #608A's requested demonstration: an attacker gets write
-# access to /workspace/output.verified.ast without ever seeing BASTION_SIGNING_KEY.
+# access to /workspace/output.verified.ast without ever seeing NEURO_SIGNING_KEY.
 #
 # NOTE: the `run_demo.sh` script in this directory reproduces these exact steps
 # without Docker (the verification run of record lives in results/ci_demo/).
 #
-#   Step 1 (Analyzer container):  has BASTION_SIGNING_KEY, runs the analyzer,
+#   Step 1 (Analyzer container):  has NEURO_SIGNING_KEY, runs the analyzer,
 #                                 writes /workspace/output.verified.ast
 #   Step 2 (Untrusted CI Action): no key, overwrites output.verified.ast with
 #                                 the unsigned use-after-move exploit payload
@@ -25,7 +25,7 @@ services:
       - workspace:/workspace
     environment:
       # Isolated to this service only — never passed to `poisoner`.
-      BASTION_SIGNING_KEY: ci-demo-prod-signing-key-do-not-leak
+      NEURO_SIGNING_KEY: ci-demo-prod-signing-key-do-not-leak
     command: >
       bash -c "
         cargo build --release --example ci_payload -p tests &&
@@ -40,7 +40,7 @@ services:
     volumes:
       - ..:/src
       - workspace:/workspace
-    # NOTE THE ABSENCE of BASTION_SIGNING_KEY / NEURO_SIGNING_KEY in this env.
+    # NOTE THE ABSENCE of NEURO_SIGNING_KEY / NEURO_SIGNING_KEY in this env.
     command: >
       bash -c "
         cargo build --release --example ci_payload -p tests &&

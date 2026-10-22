@@ -9,13 +9,13 @@ for each "container" plus a shared workspace). The same steps are packaged as
 
 | Step | action | result |
 |---|---|---|
-| 1 | analyzer container (owns `BASTION_SIGNING_KEY`) | wrote signed `output.verified.ast` (129 bytes) |
-| 2 | poisoner (NO key in env) | overwrote artifact with unsigned use-after-move payload, 147 bytes (32-byte dummy HMAC) |
+| 1 | analyzer container (owns `NEURO_SIGNING_KEY`) | wrote signed `output.verified.ast` (129 bytes) |
+| 2 | poisoner (NO key in env) | overwrote artifact with unsigned use-after-move payload, 145 bytes (32-byte dummy HMAC) |
 | 3a | **pre-fix** backend (built from commit `c480981` — no HMAC check) | **exit 0** — emitted the use-after-move LLVM IR (`results/ci_demo/step3a_prefix_ir.log`) |
 | 3b | **fixed** backend (`CRYPTO_memcmp` + boolean gate) | **exit 1** — `Error: Backend emission failed: HMAC signature verification failed` |
 | Ctl | fixed backend on the honest step-1 artifact | exit 0 — legitimate pipeline unaffected |
 
-Key isolation: the poisoner's environment (`env -u BASTION_SIGNING_KEY -u NEURO_SIGNING_KEY`)
+Key isolation: the poisoner's environment (`env -u NEURO_SIGNING_KEY -u NEURO_SIGNING_KEY`)
 never contains a signing key — write access to `output.verified.ast` alone was
 enough for the pre-fix compromise; the fixed backend rejects it cryptographically.
 
