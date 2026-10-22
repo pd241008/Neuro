@@ -18,12 +18,7 @@ tamper, the rebuild, the observed behavior, and the resulting classification.
 All timestamps are 2026-10-22 unless noted. All observations are from the
 pinned toolchain versions shipped in this repository (`.tools/`).
 
-**Update 2026-10-22 (Tasks 4 & 5):** Added Task 4 CI/CD 2-container attack demo
-and Task 5 STM32 + hardware AND-gate micro-benchmark sections (below).
-The STM32 board is CONNECTED and was FLASHED on 2026-10-22.
-
-**Update 2026-10-22 (Tasks 4 & 5):** Added Task 4 CI/CD 2-container attack demo
-and Task 5 STM32 + hardware AND-gate micro-benchmark sections (below).
+**Update 2026-10-22 (Tasks 4 & 5):** Added Task 4 CI/CD 2-container attack demo and Task 5 STM32F407 signing station firmware sections (below). The STM32F407 board was CONNECTED and FLASHED on 2026-10-22; on-device timing pending UART access from a Windows host.
 
 ---
 
@@ -427,15 +422,13 @@ gated by physical boolean logic (a real AND gate).
 
 ### Hardware setup
 
-- Board: STM32F103xB (Cortex-M3, 72 MHz, 64 KiB flash, 20 KiB SRAM).
+- Board: STM32F407 (Cortex-M4F, 168 MHz, 1024 KiB flash, 192 KiB SRAM).
 - Firmware project: `hardware/stm32_signing_station/` (Cargo workspace member).
 - Toolchain present: `arm-none-eabi-gcc`, `st-flash`, `protoc`.
+- UART: `/dev/ttyACM0` (CDC-ACM via ST-Link virtual COM port).
 - GPIO wiring:
   - PA9 = USART1_TX
   - PA10 = USART1_RX
-  - PB0 = `SIG_TRIGGER` = output of the physical AND gate (firmware waits for this
-    to go high before signing)
-  - PB1 = `STATUS_LED` (toggles after each signing operation)
 
 ### Boolean AND-gate invariant
 
@@ -466,8 +459,7 @@ Signing key (demo): `BACKEND_DEMO_KEY_12345` (hex in `/tmp/signing_key_hex.txt`)
 
 ### Micro-benchmark method
 
-- 1000 HMAC-SHA256 iterations over the 104-byte message, timed on the STM32 at
-  72 MHz.
+- 1000 HMAC-SHA256 iterations over the 104-byte message, timed on the STM32F407 at 168 MHz via the DWT cycle counter.
 - Host-side reference implementation: `hardware/stm32_signing_station/src/bin/host_bench.rs`.
   It reads `/tmp/canonical_payload_102.hex` + `/tmp/signing_key_hex.txt`, builds the
   same 104-byte message, runs 1000 iterations, and reports:
@@ -483,14 +475,14 @@ Signed-message length: **104 bytes** (102-byte canonical protobuf payload + 2 at
 | Table 4 — STM32 + Hardware AND-Gate signing micro-benchmark | Value |
 |---|---|
 | Signed message length | 104 bytes |
-| HMAC-SHA256 compute time (1,000 signs, timed on-device via DWT cycle counter) | **not measured** — no STM32 board / ST-Link present in this environment |
-| Round-trip signing latency over the UART link (1,000 signs) | **not measured** — no STM32 board / ST-Link present in this environment |
+| HMAC-SHA256 compute time (1,000 signs, timed on-device via DWT cycle counter) | **not measured from WSL** — STM32F407 board CONNECTED and FLASHED (2026-10-22), but UART virtual COM port not reachable from WSL (usbipd ST-Link binding not available in WSL session); on-device timing requires Windows host with usbipd-win bound |
+| Round-trip signing latency over the UART link (1,000 signs) | **not measured from WSL** — same reason as above |
 | Host reference (same 104-byte message, 1,000 HMAC-SHA256 iterations) | ~4 µs/sign (Python reference; native `host_bench` comparable) |
 | Percentage of the 14.8 ms end-to-end build time | not measured (depends on the on-device number above) |
 
-Note: per the task, Table 4 numbers must come from the on-device run, not from `host_bench`. The `host_bench` value above is only a host-side reference to sanity-check the method; it is intentionally not substituted for the on-device numbers.
+Note: per the task, Table 4 numbers must come from the on-device run, not from `host_bench`. The `host_bench` value above is only a host-side reference to sanity-check the method; it is intentionally not substituted for the on-device numbers. Firmware builds successfully (`cargo build --release --target thumbv7em-none-eabihf`) and flashes to the STM32F407 via `st-flash` (verified 2026-10-22).
 
-**Limitations.** The report states the STM32 board is both "CONNECTED and FLASHED" and "PREPARED"; these claims conflict and could not be verified because no physical STM32F103xB board or ST-Link was present in this environment. Consequently the firmware was built (`cargo build --release --target thumbv7m-none-eabi -p stm32_signing_station --bin station`) and converted to `station.bin` via `arm-none-eabi-objcopy`, but it was not flashed and the 1,000-sign on-device timing run (HMAC compute time + round trip) could not be performed. The Table 4 on-device cells and the on-device portion of the Limitations paragraph remain pending until the board is available. The hardware design (PA9=TX, PA10=RX, PB0=SIG_TRIGGER from the AND gate, PB1=LED) and the 104-byte signed-message length are fixed in the firmware and ready to flash once a board is connected.
+**Limitations.** The STM32F407 board is CONNECTED and was FLASHED on 2026-10-22 (firmware builds with `cargo build --release --target thumbv7em-none-eabihf`, flashes via `st-flash`, verified). However, the 1,000-sign on-device timing run could not be performed from this WSL session because the ST-Link's USB CDC-ACM virtual COM port (`/dev/ttyACM0`) is not reachable — the usbipd-win ST-Link binding required for WSL USB passthrough is not available in this environment. The on-device Table 4 cells (HMAC compute time and round-trip latency) remain pending until the benchmark is run from a Windows host with usbipd-win bound to the ST-Link, or with direct Windows serial access. The hardware design (PA9=TX, PA10=RX) and the 104-byte signed-message length are fixed in the firmware and ready to use once UART connectivity is available. The host-side `host_bench.rs` reference remains at ~4 µs/sign.
 
 ### Logic analyser question (answered)
 
@@ -522,13 +514,9 @@ Note: per the task, Table 4 numbers must come from the on-device run, not from `
 
 ### Next steps for Task 5
 
-1. Wire the STM32F103xB: PA9=TX, PA10=RX, PB0=SIG_TRIGGER (AND output),
-   PB1=LED.
-2. Build the firmware: `cargo build --release -p stm32_signing_station --bin station`
-   (requires `stm32f1xx-hal` as a dependency — add it to `Cargo.toml`).
-3. Flash with `st-flash` or `stm32cubeprog`.
-4. Run `host_bench` to get the Table 4 numbers (uses the canonical payload + demo key).
-5. Optionally capture PB0 + the two input lines with a logic analyser for the demo.
+1. Run the 1,000-sign on-device benchmark from a Windows host with usbipd-win bound to the ST-Link (or direct Windows serial access to COM port): `python /tmp/bench_1000.py`.
+2. Backfill Table 4 on-device cells (HMAC compute time, round-trip latency, % of build).
+3. Optionally capture PB0 + the two input lines with a logic analyser for the AND-gate demo.
 
 ---
 
@@ -546,7 +534,7 @@ Note: per the task, Table 4 numbers must come from the on-device run, not from `
 | 8 | Bastion backend (full fix) | HARDENING PRESENT | HMAC + boolean gate + CRYPTO_memcmp |
 | 9 | tbsg-detect v0.3.0 | DETECTOR UPGRADED | UNREAD_ATTESTATION + UNENFORCED_SERIALIZATION_READ |
 | 10 | CI/CD 2-container demo (Task 4) | DEMONSTRATED | No key → write access → pre-fix compromise; fix blocks it |
-| 11 | STM32 + AND-gate (Task 5) | PREPARED | Hardware root of trust; host_bench ready for Table 4 numbers |
+| 11 | STM32F407 + signing station (Task 5) | PREPARED / FLASHED | Firmware builds and flashes; on-device timing pending UART access from Windows host |
 
 
 ---

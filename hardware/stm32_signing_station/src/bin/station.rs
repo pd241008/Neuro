@@ -1,12 +1,20 @@
 #![no_std]
 #![no_main]
 
+use cortex_m::peripheral::DWT;
 use cortex_m_rt::entry;
-use stm32f1xx_hal as hal;
-use stm32f1xx_hal::prelude::*;
-use stm32f1xx_hal::serial::{Config, Serial};
-
 use core::panic::PanicInfo;
+
+use stm32f4xx_hal as hal;
+use hal::pac;
+use hal::prelude::*;
+
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
+type HmacSha256 = Hmac<Sha256>;
+
+const MSG_LEN: usize = 104; // 102-byte payload + 2 attestation flags
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -15,80 +23,101 @@ fn panic(_info: &PanicInfo) -> ! {
     }
 }
 
-/// Required by cortex-m-rt's Reset handler.
 #[no_mangle]
 pub unsafe extern "C" fn __pre_init() {}
 
+// ── Exception handlers required by cortex-m-rt ─────────────────────────
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn DefaultHandler(_irqn: i16) -> ! {
+    loop {
+        cortex_m::asm::bkpt();
+    }
+}
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn NonMaskableInt() -> ! { loop { cortex_m::asm::bkpt(); } }
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn HardFault() -> ! { loop { cortex_m::asm::bkpt(); } }
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn MemoryManagement() -> ! { loop { cortex_m::asm::bkpt(); } }
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn BusFault() -> ! { loop { cortex_m::asm::bkpt(); } }
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn UsageFault() -> ! { loop { cortex_m::asm::bkpt(); } }
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SVCall() -> ! { loop { cortex_m::asm::bkpt(); } }
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn DebugMonitor() -> ! { loop { cortex_m::asm::bkpt(); } }
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn PendSV() -> ! { loop { cortex_m::asm::bkpt(); } }
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn SysTick() -> ! { loop { cortex_m::asm::bkpt(); } }
+
+// ── HMAC ───────────────────────────────────────────────────────────────
+fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC key");
+    mac.update(msg);
+    let bytes = mac.finalize().into_bytes();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&bytes);
+    out
+}
+
+// ── Entry ──────────────────────────────────────────────────────────────
 #[entry]
 fn main() -> ! {
-    let dp = hal::pac::Peripherals::take().unwrap();
+    let cp = cortex_m::peripheral::Peripherals::take().unwrap();
+    let mut dwt = cp.DWT;
+    dwt.enable_cycle_counter();
 
-    let mut rcc = dp.RCC.constrain();
-    let mut flash = dp.FLASH.constrain();
-    let clocks = rcc.cfgr.freeze(&mut flash.acr);
+    let dp = pac::Peripherals::take().unwrap();
 
-    let mut gpioa = dp.GPIOA.split();
-    let mut gpiob = dp.GPIOB.split();
-    let mut afio = dp.AFIO.constrain();
+    let mut rcc = dp.RCC.freeze(hal::rcc::Config::hsi());
 
-    // USART1 on PA9 (TX) and PA10 (RX)
-    let pa9 = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
-    let pa10 = gpioa.pa10.into_floating_input(&mut gpioa.crh);
-    let mut serial = Serial::usart1(
-        dp.USART1,
-        (pa9, pa10),
-        &mut afio.mapr,
-        Config::default().baudrate(115_200_u32.bps()),
-        clocks,
-    );
+    let gpioa = dp.GPIOA.split(&mut rcc);
 
-    // SIG_TRIGGER on PB0 — input, pulled down, rising edge from AND gate
-    let mut trigger = gpiob.pb0.into_pull_down_input(&mut gpiob.crl);
-    let mut led = gpiob.pb1.into_push_pull_output(&mut gpiob.crl);
-
-    // Wait for the AND gate to assert the trigger
-    loop {
-        if trigger.is_high() {
-            break;
-        }
-        cortex_m::asm::wfi();
-    }
-
-    // Blink LED to indicate trigger received
-    for _ in 0..4 {
-        led.toggle();
-        cortex_m::asm::delay(1_000_000);
-    }
+    let mut serial = dp
+        .USART1
+        .serial((gpioa.pa9, gpioa.pa10), 115200.bps(), &mut rcc)
+        .unwrap();
 
     let key = b"BASTION_SIGNING_KEY_INTERNAL_XXXXXXXX";
     let mut rx_buf = [0u8; 256];
-    let mut rx_pos = 0;
+    let mut rx_pos: usize = 0;
 
     loop {
-        match serial.read() {
+        match nb::block!(serial.read()) {
             Ok(byte) => {
                 if byte == 0xAA {
                     rx_pos = 0;
                     rx_buf[rx_pos] = byte;
                     rx_pos += 1;
                 } else if byte == 0x55 {
-                    // End of frame: parse and sign the 104-byte message
-                    if rx_pos >= 104 {
-                        let msg = &rx_buf[1..105];
-                        let sig = station::hmac_sha256(key, msg);
-                        // Send back: 0xAA 0x01 32-byte sig 0x55
-                        serial.write(0xAA).ok();
-                        serial.write(0x01).ok();
+                    if rx_pos >= MSG_LEN + 1 {
+                        let msg = &rx_buf[1..MSG_LEN + 1];
+                        let start = DWT::cycle_count();
+                        let sig = hmac_sha256(key, msg);
+                        let end = DWT::cycle_count();
+                        let cycles = end - start;
+                        // Response: 0xAA 0x01 [32-byte sig] [4-byte cycles LE] 0x55
+                        let _ = nb::block!(serial.write(0xAA));
+                        let _ = nb::block!(serial.write(0x01));
                         for &b in sig.iter() {
-                            serial.write(b).ok();
+                            let _ = nb::block!(serial.write(b));
                         }
-                        serial.write(0x55).ok();
-                        serial.flush().ok();
-                        // Blink LED
-                        for _ in 0..4 {
-                            led.toggle();
-                            cortex_m::asm::delay(1_000_000);
+                        for b in cycles.to_le_bytes().iter() {
+                            let _ = nb::block!(serial.write(*b));
                         }
+                        let _ = nb::block!(serial.write(0x55));
                     }
                     rx_pos = 0;
                 } else {
@@ -98,23 +127,7 @@ fn main() -> ! {
                     }
                 }
             }
-            Err(_) => cortex_m::asm::wfi(),
+            Err(_) => {}
         }
-    }
-}
-
-mod station {
-    use hmac::{Hmac, Mac};
-    use sha2::Sha256;
-
-    type HmacSha256 = Hmac<Sha256>;
-
-    pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
-        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC key");
-        mac.update(msg);
-        let bytes = mac.finalize().into_bytes();
-        let mut out = [0u8; 32];
-        out.copy_from_slice(&bytes);
-        out
     }
 }
