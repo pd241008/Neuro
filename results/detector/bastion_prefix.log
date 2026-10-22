@@ -1,0 +1,23 @@
+=== Trust Boundary Semantic Gap Detector ===
+
+Found 2 field(s) with potential TBSG (written by producer, not read by consumer):
+
+[1] VerifiedProgram.borrow_check_passed (bool, proto line 23, confidence: HIGH)
+  Verdict: [UNREAD_ATTESTATION]
+    Field is written by the producer but NEVER read by the consumer — decorative attestation.
+  Producer write-sites:
+    /tmp/bastion-prefix/analyzer/src/lib.rs:18 [HIGH] borrow_check_passed: true,
+  Consumer read-sites: NONE FOUND
+
+[2] VerifiedProgram.type_check_passed (bool, proto line 24, confidence: HIGH)
+  Verdict: [UNREAD_ATTESTATION]
+    Field is written by the producer but NEVER read by the consumer — decorative attestation.
+  Producer write-sites:
+    /tmp/bastion-prefix/analyzer/src/lib.rs:19 [HIGH] type_check_passed: true,
+  Consumer read-sites: NONE FOUND
+
+---
+Severity: HIGH (design-level) if all write-sites are HIGH confidence
+         MEDIUM if any write-sites are MEDIUM/LOW confidence
+Remediation: Consumer must gate control flow on semantic fields,
+             and authenticate artifacts cryptographically (v0.3.0 rule).

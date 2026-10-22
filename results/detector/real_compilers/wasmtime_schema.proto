@@ -1,0 +1,12 @@
+syntax = "proto3";
+// Schema mirror of wasmtime 17.0.1 precompiled artifact (.cwasm) validated
+// metadata: bincode::deserialize::<Metadata> fields checked by check_compatible.
+message Metadata {
+    string target = 1;
+    bool has_native_cranelift = 2;
+    bool has_pooling_strategy = 3;
+    bool reference_types = 4;
+    bool tail_call = 5;
+    bool multi_memory = 6;
+    bool component_model = 7;
+}

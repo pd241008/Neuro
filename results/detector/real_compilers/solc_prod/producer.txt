@@ -1,0 +1,3 @@
+solc ASTJsonConverter serializes typeDescriptions, isConstant, isPure,
+lValueRequested into ast.json; downstream the importer RE-RUNS full semantic
+analysis (AST import path re-analyzes; see results/audit_solc/SUMMARY.md).

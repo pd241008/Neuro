@@ -1,0 +1,226 @@
+{
+  "sha": "601e229d7ad8d98ce388d7bd0535734d846fcba5",
+  "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/601e229d7ad8d98ce388d7bd0535734d846fcba5",
+  "tree": [
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1f16d2f34820fdfaebfecf51a6342f7d9405ee82",
+      "size": 257,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/1f16d2f34820fdfaebfecf51a6342f7d9405ee82"
+    },
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "693489659374b613f2a6fbed17ae0b82de5089f3",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/693489659374b613f2a6fbed17ae0b82de5089f3"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7790b83f872596a02f203142a65b623142aa6f53",
+      "size": 215,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/7790b83f872596a02f203142a65b623142aa6f53"
+    },
+    {
+      "path": ".gitmodules",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2f6c628a2f24cdc0899c4728cb99829cda0551ba",
+      "size": 768,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/2f6c628a2f24cdc0899c4728cb99829cda0551ba"
+    },
+    {
+      "path": "ADOPTERS.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "581828946d9da477274494a5f09b0b45c7db68f6",
+      "size": 2784,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/581828946d9da477274494a5f09b0b45c7db68f6"
+    },
+    {
+      "path": "CODEOWNERS",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "61d8a372db8d2d4058b5ed38f49e723bf61a1141",
+      "size": 1848,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/61d8a372db8d2d4058b5ed38f49e723bf61a1141"
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "14db69404fe7b99e11e2f006da94d46a396dbd0e",
+      "size": 3499,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/14db69404fe7b99e11e2f006da94d46a396dbd0e"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "54552904d779bb920e52c46d06462966db61da96",
+      "size": 569,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/54552904d779bb920e52c46d06462966db61da96"
+    },
+    {
+      "path": "Cargo.lock",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "be24730e957612d7b254196b1b25e4b809583c91",
+      "size": 95991,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/be24730e957612d7b254196b1b25e4b809583c91"
+    },
+    {
+      "path": "Cargo.toml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "11a7f236651b33c2b196f5a201f2b58dc441e023",
+      "size": 15268,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/11a7f236651b33c2b196f5a201f2b58dc441e023"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f9d81955f4bcb8f96a025e2ecc46f39ec536d465",
+      "size": 12243,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/f9d81955f4bcb8f96a025e2ecc46f39ec536d465"
+    },
+    {
+      "path": "ORG_CODE_OF_CONDUCT.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6f4fb3f537d154768878020bbbb7fc2897956066",
+      "size": 7226,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/6f4fb3f537d154768878020bbbb7fc2897956066"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3b52b9d9a0affe24f64f31c7185498f30e94835d",
+      "size": 7281,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/3b52b9d9a0affe24f64f31c7185498f30e94835d"
+    },
+    {
+      "path": "RELEASES.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fdc3cff96bacc15c3c61456827ccef8c7041e023",
+      "size": 145505,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/fdc3cff96bacc15c3c61456827ccef8c7041e023"
+    },
+    {
+      "path": "SECURITY.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1991e90af642a0fe0b676f84e32de79a998a716",
+      "size": 251,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/a1991e90af642a0fe0b676f84e32de79a998a716"
+    },
+    {
+      "path": "benches",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ee80715cfa1da997deb8c5e9ab7e6f566f55aa6c",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/ee80715cfa1da997deb8c5e9ab7e6f566f55aa6c"
+    },
+    {
+      "path": "build.rs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5e8ef0a78f6f00cd1bd6fcda62e5b0ede2753efc",
+      "size": 10346,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/5e8ef0a78f6f00cd1bd6fcda62e5b0ede2753efc"
+    },
+    {
+      "path": "ci",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1e1179d5883a00e2e9cc4e59e4b5a9d8ca0443ea",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/1e1179d5883a00e2e9cc4e59e4b5a9d8ca0443ea"
+    },
+    {
+      "path": "cranelift",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "63929d88bbd3c4ac14a0052e4a4ba4f1473c5bf1",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/63929d88bbd3c4ac14a0052e4a4ba4f1473c5bf1"
+    },
+    {
+      "path": "crates",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9b6439029068a9cffe3230c890a2c51d7477a975",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/9b6439029068a9cffe3230c890a2c51d7477a975"
+    },
+    {
+      "path": "deny.toml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "026b19a2c8d9241523dcca0053d98379a67755ab",
+      "size": 1932,
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/blobs/026b19a2c8d9241523dcca0053d98379a67755ab"
+    },
+    {
+      "path": "docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "fdacf5be2cb3c2799d51104eb9ddaab36141c1ba",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/fdacf5be2cb3c2799d51104eb9ddaab36141c1ba"
+    },
+    {
+      "path": "examples",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2d3827f0a438e657263f9b0454a71007686cec40",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/2d3827f0a438e657263f9b0454a71007686cec40"
+    },
+    {
+      "path": "fuzz",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "04dfcced5dbb69a153e6e1e4150e9e476d882d85",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/04dfcced5dbb69a153e6e1e4150e9e476d882d85"
+    },
+    {
+      "path": "scripts",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "34f4e04e04ebf8572e23930be07d6c5e0569d9d4",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/34f4e04e04ebf8572e23930be07d6c5e0569d9d4"
+    },
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "090327bf7c995adba28ffb5bfbbb6cc80e78cc20",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/090327bf7c995adba28ffb5bfbbb6cc80e78cc20"
+    },
+    {
+      "path": "supply-chain",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "359edf65cd222e64faf0f8c3c18b1d39115097e5",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/359edf65cd222e64faf0f8c3c18b1d39115097e5"
+    },
+    {
+      "path": "tests",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d73c0ce1e78c8d7dc569b45c452f6692c918922a",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/d73c0ce1e78c8d7dc569b45c452f6692c918922a"
+    },
+    {
+      "path": "winch",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "448ef44f00807ac9f3522c9b61d9ad41a7aab35b",
+      "url": "https://api.github.com/repos/bytecodealliance/wasmtime/git/trees/448ef44f00807ac9f3522c9b61d9ad41a7aab35b"
+    }
+  ],
+  "truncated": false
+}
